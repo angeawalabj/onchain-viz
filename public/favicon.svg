@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Fond -->
+  <rect width="32" height="32" rx="7" fill="#0d0d1a"/>
+
+  <!-- Hexagone central — couleur violet signature -->
+  <polygon
+    points="16,5 24,10 24,20 16,25 8,20 8,10"
+    fill="none"
+    stroke="#7c6df0"
+    stroke-width="1.5"
+    stroke-linejoin="round"
+  />
+
+  <!-- Nœud central -->
+  <circle cx="16" cy="15.5" r="2.2" fill="#7c6df0" opacity="0.9"/>
+
+  <!-- Nœuds satellites -->
+  <circle cx="16" cy="7"    r="1.2" fill="#14b8a6" opacity="0.8"/>
+  <circle cx="22.5" cy="11" r="1.2" fill="#818cf8" opacity="0.8"/>
+  <circle cx="22.5" cy="20" r="1.2" fill="#818cf8" opacity="0.8"/>
+  <circle cx="16"   cy="24" r="1.2" fill="#f59e0b" opacity="0.8"/>
+  <circle cx="9.5"  cy="20" r="1.2" fill="#818cf8" opacity="0.8"/>
+  <circle cx="9.5"  cy="11" r="1.2" fill="#10b981" opacity="0.8"/>
+
+  <!-- Liens centre → satellites -->
+  <line x1="16" y1="15.5" x2="16"   y2="8"    stroke="#7c6df0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="16" y1="15.5" x2="22"   y2="11.5" stroke="#7c6df0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="16" y1="15.5" x2="22"   y2="19.5" stroke="#7c6df0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="16" y1="15.5" x2="16"   y2="23"   stroke="#7c6df0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="16" y1="15.5" x2="10"   y2="19.5" stroke="#7c6df0" stroke-width="0.8" opacity="0.5"/>
+  <line x1="16" y1="15.5" x2="10"   y2="11.5" stroke="#7c6df0" stroke-width="0.8" opacity="0.5"/>
+</svg>
