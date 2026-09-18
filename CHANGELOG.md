@@ -5,7 +5,7 @@
 ### Ajouté
 
 **Architecture**
-- Next.js 14 App Router + React Three Fiber — canvas WebGL `dynamic()` côté client uniquement
+- Next.js 16 App Router + React Three Fiber — canvas WebGL `dynamic()` côté client uniquement
 - Zustand store avec persistance localStorage (clés API + préférences)
 - 2 ADR (stack technique, design system) documentant les décisions
 

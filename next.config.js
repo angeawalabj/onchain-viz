@@ -11,13 +11,20 @@ const nextConfig = {
     "postprocessing",
   ],
 
-  webpack(config) {
-    // Permet l'import de fichiers GLSL (shaders custom si besoin futur)
-    config.module.rules.push({
-      test: /\.(glsl|vs|fs|vert|frag)$/,
-      use: "raw-loader",
-    });
-    return config;
+  // Permet l'import de fichiers GLSL (shaders custom si besoin futur).
+  // Next.js 16 utilise Turbopack par défaut, qui refuse un config
+  // webpack() sans config turbopack explicite — migré vers sa syntaxe
+  // native plutôt que forcer --webpack (confirmé dans
+  // node_modules/next/dist/docs/.../turbopack.md : raw-loader est
+  // officiellement supporté par Turbopack).
+  turbopack: {
+    rules: {
+      "*.glsl": { loaders: ["raw-loader"], as: "*.js" },
+      "*.vs":   { loaders: ["raw-loader"], as: "*.js" },
+      "*.fs":   { loaders: ["raw-loader"], as: "*.js" },
+      "*.vert": { loaders: ["raw-loader"], as: "*.js" },
+      "*.frag": { loaders: ["raw-loader"], as: "*.js" },
+    },
   },
 
   // Headers sécurité

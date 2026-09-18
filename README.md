@@ -6,7 +6,7 @@ Visualisation 3D interactive des données on-chain Ethereum. Graphe de transacti
 
 | Couche | Technologie |
 |--------|-------------|
-| Framework | Next.js 14 App Router |
+| Framework | Next.js 16 App Router |
 | 3D | React Three Fiber + @react-three/drei |
 | Post-processing | @react-three/postprocessing (bloom, vignette) |
 | Layout graphe | d3-force-3d (simulation 3D) |
