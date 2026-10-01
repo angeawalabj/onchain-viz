@@ -34,7 +34,7 @@ montants ramenés proportionnellement à la variation du focal pour ne pas lui
 attribuer les flux d'une transaction multi-parties.
 
 Seul le jeton natif est compté (SOL, SUI, HBAR, ETH) — les tokens demandent
-un prix par token, hors périmètre de cette étape.
+un prix par token, hors périmètre de cette étape (ajoutés ensuite : ADR-0004).
 
 ### 3. Sources de données
 
@@ -60,4 +60,4 @@ en mode Wallet si le mode actif n'y est pas disponible.
 - Les endpoints publics peuvent limiter le débit : une transaction Solana
   en échec est ignorée plutôt que de faire échouer tout le graphe.
 - Les transferts de tokens (SPL, coins Sui, HTS, ERC-20) ne sont pas encore
-  représentés.
+  représentés — voir ADR-0004.

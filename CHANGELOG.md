@@ -62,6 +62,19 @@
 - Données de démo au format de chaque chaîne ; liens explorateurs par chaîne (Solscan, Suiscan, HashScan…)
 - 25 tests (adapters sur réponses réelles, validation d'adresses, graphe wallet)
 
+### Ajouté — transferts de jetons (ADR-0004)
+- Registre de jetons par chaîne (`lib/tokens.ts`), identifiés par contrat/mint/coin type/token id exact — protège du spam
+  - Ethereum : USDC, USDT, DAI, WETH, WBTC, stETH, LINK, UNI
+  - Solana : USDC, USDT, JUP, BONK, JitoSOL · Sui : USDC, USDT, DEEP, CETUS, WAL · Hedera : USDC, SAUCE
+- Variations de solde par actif ; un swap donne deux transferts (actif vendu, actif reçu)
+- Prix de tous les actifs en une requête CoinGecko par chaîne (stablecoins à $1)
+- Liens : liste des symboles échangés ; panneau de détail : actifs du nœud et de chaque connexion
+- 17 tests (adapters jetons sur réponses réelles, registre, prix, Etherscan V2)
+
+### Corrigé
+- Etherscan V1 désactivé par Etherscan → passage à l'API V2 (le mode Ethereum réel ne fonctionnait plus)
+- Erreurs Etherscan : message détaillé ("Invalid API Key"…) au lieu de "NOTOK" ; adresse sans transaction = graphe vide, pas une erreur
+
 ### À venir
 
 - Support ENS pour les presets dans le sélecteur de collection

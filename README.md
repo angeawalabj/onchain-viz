@@ -34,6 +34,15 @@ Sans clé API → données de démo (25 nœuds réalistes).
 | Sui | `0x…` (64 hex) ou nom `.sui` | GraphQL Sui | aucune |
 | Hedera | `0.0.N` | Mirror Node | aucune |
 
+Jetons suivis en plus du jeton natif (liste blanche anti-spam, [ADR-0004](docs/ADR-0004-tokens.md)) :
+
+| Chaîne | Jetons |
+|--------|--------|
+| Ethereum | USDC, USDT, DAI, WETH, WBTC, stETH, LINK, UNI |
+| Solana | USDC, USDT, JUP, BONK, JitoSOL |
+| Sui | USDC, USDT, DEEP, CETUS, WAL |
+| Hedera | USDC, SAUCE |
+
 Les modes DeFi et Contract restent pour l'instant Ethereum uniquement. Détails et contraintes des API : [ADR-0003](docs/ADR-0003-multi-chain.md).
 
 ## Démarrage local
@@ -75,6 +84,7 @@ onchain-viz/
 │   ├── types.ts          ← Types, palette, helpers
 │   ├── store.ts          ← Zustand store global
 │   ├── chains.ts         ← Config par chaîne (adresses, presets, explorateurs)
+│   ├── tokens.ts         ← Registre des jetons suivis par chaîne
 │   ├── prices.ts         ← Prix USD (CoinGecko + fallback)
 │   ├── fetchers.ts       ← Graphe wallet multi-chaînes, The Graph, Alchemy + mocks
 │   ├── adapters/         ← deltas (règle commune), solana, sui, hedera
@@ -82,7 +92,8 @@ onchain-viz/
 └── docs/
     ├── ADR-0001-stack.md
     ├── ADR-0002-design.md
-    └── ADR-0003-multi-chain.md
+    ├── ADR-0003-multi-chain.md
+    └── ADR-0004-tokens.md
 ```
 
 ## Optimisations performance

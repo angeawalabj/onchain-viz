@@ -3,10 +3,10 @@
  * Résolution SuiNS (*.sui) incluse.
  */
 
-import type { TxDeltas } from "./deltas";
+import type { BalanceDelta, TxDeltas } from "./deltas";
+import { NATIVE, TOKENS, toUnits } from "../tokens";
 
 const GRAPHQL_URL = "https://graphql.mainnet.sui.io/graphql";
-const MIST        = 1e9;
 const TX_LIMIT    = 50;
 const SUI_COIN    = "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI";
 
@@ -60,11 +60,18 @@ export interface SuiTx {
   } | null;
 }
 
-/** Ne garde que les variations en SUI natif, sur des propriétaires adresses. */
+/** Garde le SUI natif et les coins du registre, sur des propriétaires adresses. */
 export function suiTxToDeltas(tx: SuiTx): TxDeltas {
   const ts = tx.effects?.timestamp ? Date.parse(tx.effects.timestamp) / 1000 : 0;
-  const deltas = (tx.effects?.balanceChanges.nodes ?? [])
-    .filter((c) => c.owner && c.coinType?.repr === SUI_COIN)
-    .map((c) => ({ owner: c.owner!.address, amount: Number(c.amount) / MIST }));
+  const deltas: BalanceDelta[] = [];
+  for (const c of tx.effects?.balanceChanges.nodes ?? []) {
+    const repr = c.coinType?.repr;
+    if (!c.owner || !repr) continue;
+    if (repr === SUI_COIN) {
+      deltas.push({ owner: c.owner.address, asset: NATIVE, amount: toUnits(c.amount, 9) });
+    } else if (TOKENS.sui[repr]) {
+      deltas.push({ owner: c.owner.address, asset: repr, amount: toUnits(c.amount, TOKENS.sui[repr].decimals) });
+    }
+  }
   return { timestamp: ts, deltas };
 }

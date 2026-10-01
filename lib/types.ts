@@ -61,6 +61,7 @@ export interface GraphLink {
   txCount:   number;
   direction: "in" | "out" | "both";
   timestamp: number;             // last tx unix
+  assets?:   string[];           // symboles échangés sur ce lien (ex: ["SOL", "USDC"])
 }
 
 export interface GraphData {

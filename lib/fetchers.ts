@@ -11,8 +11,9 @@ import type {
 } from "./types";
 import { shortAddr } from "./types";
 import { CHAINS } from "./chains";
-import { getUsdPrice } from "./prices";
-import { deltasToTransfers, type NativeTransfer, type TxDeltas } from "./adapters/deltas";
+import { getAssetPrices } from "./prices";
+import { NATIVE, TOKENS, tokenInfo, toUnits } from "./tokens";
+import { deltasToTransfers, type Transfer, type TxDeltas } from "./adapters/deltas";
 import { fetchSolanaTxDeltas } from "./adapters/solana";
 import { fetchSuiTxDeltas } from "./adapters/sui";
 import { fetchHederaTxDeltas } from "./adapters/hedera";
@@ -45,7 +46,7 @@ export async function fetchWalletGraph(
   const { chain, minVolume } = params;
   const address = CHAINS[chain].normalize(params.address);
 
-  let transfers: NativeTransfer[];
+  let transfers: Transfer[];
   if (chain === "ethereum") {
     if (!keys.etherscanKey) return mockWalletGraph(address, chain);
     transfers = await fetchEtherscanTransfers(address, keys.etherscanKey);
@@ -57,20 +58,23 @@ export async function fetchWalletGraph(
     transfers = txs.flatMap((tx) => deltasToTransfers(address, tx));
   }
 
-  const price = await getUsdPrice(chain);
-  const graph = buildWalletGraph(chain, address, transfers, price, minVolume);
+  const prices = await getAssetPrices(chain);
+  const graph  = buildWalletGraph(chain, address, transfers, prices, minVolume);
   if (graph.links.length === 0) {
-    throw new Error(`Aucun transfert ${CHAINS[chain].symbol} ≥ $${minVolume} dans les dernières transactions`);
+    throw new Error(`Aucun transfert ≥ $${minVolume} (${CHAINS[chain].symbol} ou jeton suivi) dans les dernières transactions`);
   }
   return graph;
 }
 
-/** Agrège des transferts focal ↔ pairs en nœuds + liens (un lien par sens). */
+/**
+ * Agrège des transferts focal ↔ pairs en nœuds + liens (un lien par sens),
+ * tous actifs confondus en USD. Les actifs sans prix connu sont ignorés.
+ */
 export function buildWalletGraph(
   chain: Chain,
   address: string,
-  transfers: NativeTransfer[],
-  priceUSD: number,
+  transfers: Transfer[],
+  prices: Record<string, number>,
   minVolume: number
 ): GraphData {
   const nodeMap = new Map<string, GraphNode>();
@@ -89,7 +93,10 @@ export function buildWalletGraph(
   });
 
   for (const t of transfers) {
-    const valueUSD = t.amount * priceUSD;
+    const price = prices[t.asset];
+    const info  = tokenInfo(chain, t.asset);
+    if (price === undefined || !info) continue;
+    const valueUSD = t.amount * price;
     if (!t.peer || t.peer === address || valueUSD < minVolume) continue;
 
     const peerAddr = CHAINS[chain].normalize(t.peer);
@@ -123,6 +130,7 @@ export function buildWalletGraph(
       const link = linkMap.get(linkKey)!;
       link.volume  += valueUSD;
       link.txCount += 1;
+      if (!link.assets!.includes(info.symbol)) link.assets!.push(info.symbol);
     } else {
       linkMap.set(linkKey, {
         source:    isOut ? address : peerAddr,
@@ -131,6 +139,7 @@ export function buildWalletGraph(
         txCount:   1,
         direction: isOut ? "out" : "in",
         timestamp: t.timestamp,
+        assets:    [info.symbol],
       });
     }
   }
@@ -143,28 +152,46 @@ export function buildWalletGraph(
   };
 }
 
-// ─── Adapter Ethereum — Etherscan API ─────────────────────────────────────────
+// ─── Adapter Ethereum — Etherscan API V2 ──────────────────────────────────────
 
-async function fetchEtherscanTransfers(address: string, etherscanKey: string): Promise<NativeTransfer[]> {
-  const base = "https://api.etherscan.io/api";
+const ETHERSCAN_V2 = "https://api.etherscan.io/v2/api?chainid=1";
 
-  // Récupère les 100 dernières transactions normales
-  const url = `${base}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${etherscanKey}`;
+/** Appel Etherscan V2 ; "No transactions found" = liste vide, pas une erreur. */
+async function etherscanList<T>(action: string, address: string, key: string): Promise<T[]> {
+  const url  = `${ETHERSCAN_V2}&module=account&action=${action}&address=${address}&page=1&offset=100&sort=desc&apikey=${key}`;
   const res  = await fetch(url);
   const data = await res.json();
+  if (data.status === "1") return data.result;
+  if (typeof data.message === "string" && data.message.startsWith("No transactions")) return [];
+  // En erreur, Etherscan met le détail dans `result` ("Invalid API Key"…) et "NOTOK" dans `message`
+  throw new Error(typeof data.result === "string" ? data.result : data.message || "Etherscan error");
+}
 
-  if (data.status !== "1") throw new Error(data.message || "Etherscan error");
+/** 100 dernières transactions ETH + 100 derniers transferts ERC-20 du registre. */
+export async function fetchEtherscanTransfers(address: string, etherscanKey: string): Promise<Transfer[]> {
+  const [txs, tokenTxs] = await Promise.all([
+    etherscanList<EtherscanTx>("txlist", address, etherscanKey),
+    etherscanList<EtherscanTokenTx>("tokentx", address, etherscanKey),
+  ]);
+  return [
+    ...txs.map((tx) => etherscanToTransfer(address, tx, NATIVE, 18)),
+    ...tokenTxs.flatMap((tx) => {
+      const contract = tx.contractAddress.toLowerCase();
+      const token    = TOKENS.ethereum[contract];
+      return token ? [etherscanToTransfer(address, tx, contract, token.decimals)] : [];
+    }),
+  ];
+}
 
-  const txs: EtherscanTx[] = data.result;
-  return txs.map((tx) => {
-    const isOut = tx.from.toLowerCase() === address;
-    return {
-      peer:      (isOut ? tx.to : tx.from).toLowerCase(),   // to vide = création de contrat
-      isOut,
-      amount:    Number(tx.value) / 1e18,
-      timestamp: parseInt(tx.timeStamp),
-    };
-  });
+function etherscanToTransfer(address: string, tx: EtherscanTx, asset: string, decimals: number): Transfer {
+  const isOut = tx.from.toLowerCase() === address;
+  return {
+    peer:      (isOut ? tx.to : tx.from).toLowerCase(),   // to vide = création de contrat
+    isOut,
+    asset,
+    amount:    toUnits(tx.value, decimals),
+    timestamp: parseInt(tx.timeStamp),
+  };
 }
 
 interface EtherscanTx {
@@ -173,6 +200,10 @@ interface EtherscanTx {
   value:     string;
   timeStamp: string;
   hash:      string;
+}
+
+interface EtherscanTokenTx extends EtherscanTx {
+  contractAddress: string;
 }
 
 // ─── Mode DeFi — The Graph (Uniswap V3) ──────────────────────────────────────
@@ -378,6 +409,13 @@ export function mockWalletGraph(address: string, chain: Chain = "ethereum"): Gra
     ...peers,
   ];
 
+  // Actifs échangés : natif seul, natif + jeton, ou jeton seul
+  const tokenSymbols = Object.values(TOKENS[chain]).map((t) => t.symbol);
+  const assetsFor    = (i: number): string[] =>
+    i % 3 === 0 ? [cfg.symbol]
+    : i % 3 === 1 ? [cfg.symbol, tokenSymbols[i % tokenSymbols.length]]
+    : [tokenSymbols[i % tokenSymbols.length]];
+
   const links: GraphLink[] = peers.map((p, i) => ({
     source:    i % 2 === 0 ? center : p.id,
     target:    i % 2 === 0 ? p.id   : center,
@@ -385,6 +423,7 @@ export function mockWalletGraph(address: string, chain: Chain = "ethereum"): Gra
     txCount:   p.txCount,
     direction: (["in", "out", "both"] as const)[i % 3],
     timestamp: Date.now() / 1000 - Math.random() * 86400 * 30,
+    assets:    assetsFor(i),
   }));
 
   return { nodes, links, centerAddress: center, fetchedAt: Date.now() };

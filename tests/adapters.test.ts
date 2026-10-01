@@ -3,6 +3,9 @@ import { deltasToTransfers } from "../lib/adapters/deltas";
 import { solanaTxToDeltas, type SolanaTx } from "../lib/adapters/solana";
 import { suiTxToDeltas, type SuiTx } from "../lib/adapters/sui";
 import { hederaTxToDeltas } from "../lib/adapters/hedera";
+import { NATIVE } from "../lib/tokens";
+
+const n = (owner: string, amount: number) => ({ owner, asset: NATIVE, amount });
 
 // ─── deltasToTransfers ────────────────────────────────────────────────────────
 
@@ -10,17 +13,17 @@ describe("deltasToTransfers", () => {
   it("focal qui envoie → transferts sortants vers les pairs crédités", () => {
     const out = deltasToTransfers("A", {
       timestamp: 100,
-      deltas: [{ owner: "A", amount: -10 }, { owner: "B", amount: 10 }],
+      deltas: [n("A", -10), n("B", 10)],
     });
-    expect(out).toEqual([{ peer: "B", isOut: true, amount: 10, timestamp: 100 }]);
+    expect(out).toEqual([{ peer: "B", isOut: true, asset: NATIVE, amount: 10, timestamp: 100 }]);
   });
 
   it("focal qui reçoit → transferts entrants depuis les pairs débités", () => {
     const out = deltasToTransfers("A", {
       timestamp: 100,
-      deltas: [{ owner: "B", amount: -5 }, { owner: "A", amount: 5 }, { owner: "C", amount: 3 }],
+      deltas: [n("B", -5), n("A", 5), n("C", 3)],
     });
-    expect(out).toEqual([{ peer: "B", isOut: false, amount: 5, timestamp: 100 }]);
+    expect(out).toEqual([{ peer: "B", isOut: false, asset: NATIVE, amount: 5, timestamp: 100 }]);
   });
 
   it("ramène les montants des pairs à la variation du focal", () => {
@@ -28,10 +31,10 @@ describe("deltasToTransfers", () => {
     const out = deltasToTransfers("A", {
       timestamp: 0,
       deltas: [
-        { owner: "A", amount: -10 },
-        { owner: "D", amount: -30 },
-        { owner: "B", amount: 30 },
-        { owner: "C", amount: 10 },
+        n("A", -10),
+        n("D", -30),
+        n("B", 30),
+        n("C", 10),
       ],
     });
     const total = out.reduce((s, t) => s + t.amount, 0);
@@ -42,8 +45,22 @@ describe("deltasToTransfers", () => {
   it("retourne [] si le focal n'est pas concerné", () => {
     expect(deltasToTransfers("Z", {
       timestamp: 0,
-      deltas: [{ owner: "A", amount: -1 }, { owner: "B", amount: 1 }],
+      deltas: [n("A", -1), n("B", 1)],
     })).toEqual([]);
+  });
+
+  it("traite chaque actif séparément (swap SOL → USDC = 2 transferts)", () => {
+    const out = deltasToTransfers("A", {
+      timestamp: 0,
+      deltas: [
+        n("A", -10), n("POOL", 10),
+        { owner: "A", asset: "USDC", amount: 1500 }, { owner: "POOL", asset: "USDC", amount: -1500 },
+      ],
+    });
+    expect(out).toEqual([
+      { peer: "POOL", isOut: true,  asset: NATIVE, amount: 10,   timestamp: 0 },
+      { peer: "POOL", isOut: false, asset: "USDC", amount: 1500, timestamp: 0 },
+    ]);
   });
 });
 
@@ -70,7 +87,7 @@ describe("solanaTxToDeltas", () => {
     expect(timestamp).toBe(1790827457);
     expect(deltas).toHaveLength(2);
     expect(deltas[0].amount).toBeCloseTo(-0.00169494);
-    expect(deltas[1]).toEqual({ owner: "2ERPB2PMp4WaaUNFwb2EU4Exmv9hheydj5ekCV3w9P8n", amount: 0.00148844 });
+    expect(deltas[1]).toEqual(n("2ERPB2PMp4WaaUNFwb2EU4Exmv9hheydj5ekCV3w9P8n", 0.00148844));
   });
 
   it("inclut les comptes des lookup tables (transactions v0)", () => {
@@ -79,7 +96,48 @@ describe("solanaTxToDeltas", () => {
       transaction: { message: { accountKeys: ["A"] } },
       meta: { err: null, preBalances: [2e9, 0], postBalances: [1e9, 1e9], loadedAddresses: { writable: ["B"], readonly: [] } },
     };
-    expect(solanaTxToDeltas(v0).deltas).toEqual([{ owner: "A", amount: -1 }, { owner: "B", amount: 1 }]);
+    expect(solanaTxToDeltas(v0).deltas).toEqual([n("A", -1), n("B", 1)]);
+  });
+
+  it("ajoute les jetons du registre par propriétaire (USDC réel), ignore les autres mints", () => {
+    const USDC = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    const bal  = (accountIndex: number, mint: string, owner: string, amount: string) =>
+      ({ accountIndex, mint, owner, uiTokenAmount: { amount } });
+    const withTokens: SolanaTx = {
+      blockTime: 1,
+      transaction: { message: { accountKeys: ["X", "Y", "Z", "W"] } },
+      meta: {
+        err: null, preBalances: [0, 0, 0, 0], postBalances: [0, 0, 0, 0],
+        preTokenBalances: [
+          bal(2, USDC, "4MRUK7wYQ5QkvYkVDdMffyaURLQijAogViCQUmwrqaxJ", "905076313"),
+          bal(3, USDC, "HHfJ8aaKoYFzoddDVnW4aommW6HQSnEdQf6R4d8w2E8S", "105654430"),
+          bal(1, "SpamMint1111111111111111111111111111111111", "HHfJ8aaKoYFzoddDVnW4aommW6HQSnEdQf6R4d8w2E8S", "5"),
+        ],
+        postTokenBalances: [
+          bal(2, USDC, "4MRUK7wYQ5QkvYkVDdMffyaURLQijAogViCQUmwrqaxJ", "905151309"),
+          bal(3, USDC, "HHfJ8aaKoYFzoddDVnW4aommW6HQSnEdQf6R4d8w2E8S", "105774424"),
+          bal(1, "SpamMint1111111111111111111111111111111111", "HHfJ8aaKoYFzoddDVnW4aommW6HQSnEdQf6R4d8w2E8S", "999"),
+        ],
+      },
+    };
+    const { deltas } = solanaTxToDeltas(withTokens);
+    expect(deltas).toHaveLength(2);
+    expect(deltas.every((d) => d.asset === USDC)).toBe(true);
+    expect(deltas[0].amount).toBeCloseTo(0.074996);
+  });
+
+  it("compte de jetons créé dans la tx (absent de pre) → variation = solde post", () => {
+    const USDT = "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB";
+    const tx2: SolanaTx = {
+      blockTime: 1,
+      transaction: { message: { accountKeys: ["A"] } },
+      meta: {
+        err: null, preBalances: [0], postBalances: [0],
+        preTokenBalances: [],
+        postTokenBalances: [{ accountIndex: 0, mint: USDT, owner: "B", uiTokenAmount: { amount: "2500000" } }],
+      },
+    };
+    expect(solanaTxToDeltas(tx2).deltas).toEqual([{ owner: "B", asset: USDT, amount: 2.5 }]);
   });
 
   it("ignore les transactions en échec", () => {
@@ -104,13 +162,21 @@ describe("suiTxToDeltas", () => {
     },
   };
 
-  it("ne garde que le SUI natif détenu par des adresses", () => {
+  it("garde SUI natif + coins du registre détenus par des adresses", () => {
     const { timestamp, deltas } = suiTxToDeltas(tx);
     expect(timestamp).toBe(Date.parse("2026-10-01T04:01:48.872Z") / 1000);
     expect(deltas).toEqual([
-      { owner: "0xaaa", amount: -7236.54208788 },
-      { owner: "0xbbb", amount: 6824.2 },
+      n("0xaaa", -7236.54208788),
+      n("0xbbb", 6824.2),
+      { owner: "0xaaa", asset: USDC, amount: -3906.585901 },
     ]);
+  });
+
+  it("ignore les coins hors registre", () => {
+    const spam: SuiTx = { effects: { timestamp: null, balanceChanges: { nodes: [
+      { owner: { address: "0xaaa" }, coinType: { repr: "0xdead::fake::USDC" }, amount: "1000000" },
+    ] } } };
+    expect(suiTxToDeltas(spam).deltas).toEqual([]);
   });
 });
 
@@ -142,6 +208,22 @@ describe("hederaTxToDeltas", () => {
 
   it("ignore les transactions en échec", () => {
     expect(hederaTxToDeltas({ ...tx, result: "INSUFFICIENT_PAYER_BALANCE" }, "0.0.10881452").deltas).toEqual([]);
+  });
+
+  it("ajoute les token_transfers du registre (USDC réel), ignore les autres tokens", () => {
+    const withTokens = {
+      ...tx,
+      token_transfers: [
+        { token_id: "0.0.456858", account: "0.0.3964804",  amount: 93012024 },
+        { token_id: "0.0.456858", account: "0.0.10789302", amount: -93012024 },
+        { token_id: "0.0.9999999", account: "0.0.3964804", amount: 1 },
+      ],
+    };
+    const tokenDeltas = hederaTxToDeltas(withTokens, "0.0.3964804").deltas.filter((d) => d.asset !== NATIVE);
+    expect(tokenDeltas).toEqual([
+      { owner: "0.0.3964804",  asset: "0.0.456858", amount: 93.012024 },
+      { owner: "0.0.10789302", asset: "0.0.456858", amount: -93.012024 },
+    ]);
   });
 
   it("produit un transfert entrant de bout en bout", () => {
