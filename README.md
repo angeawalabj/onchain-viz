@@ -19,7 +19,7 @@ Visualisation 3D interactive des données on-chain — **Ethereum, Solana, Sui e
 
 | Mode | Données | API requise |
 |------|---------|-------------|
-| **Wallet Graph** | Transactions d'une adresse, nœuds voisins, flux entrant/sortant | Etherscan (free) |
+| **Wallet Graph** | Transactions d'une adresse, nœuds voisins, flux entrant/sortant — chaque voisin peut être « exploré » pour suivre l'argent de proche en proche | Etherscan (free) |
 | **DeFi Liquidity** | Top pools Uniswap V3 / Aave / Curve par TVL | The Graph (free) |
 | **Contract Activity** | Appelants d'un smart contract, fréquence, volume | Alchemy (free) |
 
@@ -86,6 +86,7 @@ onchain-viz/
 │   ├── chains.ts         ← Config par chaîne (adresses, presets, explorateurs)
 │   ├── tokens.ts         ← Registre des jetons suivis par chaîne
 │   ├── prices.ts         ← Prix USD (CoinGecko + fallback)
+│   ├── expand.ts         ← « Suivre l'argent » : fusion du graphe d'un nœud déplié
 │   ├── fetchers.ts       ← Graphe wallet multi-chaînes, The Graph, Alchemy + mocks
 │   ├── adapters/         ← deltas (règle commune), solana, sui, hedera
 │   └── useForceGraph.ts  ← Hook d3-force-3d simulation

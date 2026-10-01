@@ -110,6 +110,13 @@ function NodeInstance({
       {isSelected && (
         <SelectionRing radius={r} />
       )}
+      {/* Anneau fixe : nœud déjà exploré ("suivre l'argent") */}
+      {node.expanded && !isSelected && (
+        <mesh>
+          <torusGeometry args={[r * 1.25, 0.03, 6, 48]} />
+          <meshBasicMaterial color={PALETTE.accent} transparent opacity={0.55} />
+        </mesh>
+      )}
     </group>
   );
 }

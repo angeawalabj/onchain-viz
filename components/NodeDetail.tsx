@@ -7,6 +7,8 @@ import { nodeColor, formatUSD, PALETTE } from "../lib/types";
 import type { SimNode, SimLink } from "../lib/useForceGraph";
 import { lookupEns } from "../lib/ens";
 import { CHAINS } from "../lib/chains";
+import { fetchWalletGraph } from "../lib/fetchers";
+import { mergeExpansion, expandBlocker, EXPAND_BLOCKER_LABEL } from "../lib/expand";
 
 interface NodeDetailProps {
   nodes: SimNode[];
@@ -17,6 +19,11 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
   const selectedId  = useVizStore((s) => s.selectedNode);
   const setSelected = useVizStore((s) => s.setSelected);
   const chain       = useVizStore((s) => s.chain);
+  const mode        = useVizStore((s) => s.mode);
+  const graph       = useVizStore((s) => s.graph);
+  const setGraph    = useVizStore((s) => s.setGraph);
+  const etherscanKey = useVizStore((s) => s.etherscanKey);
+  const heliusKey    = useVizStore((s) => s.heliusKey);
 
   const node = nodes.find((n) => n.id === selectedId);
 
@@ -32,6 +39,33 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
     if (!node || chain !== "ethereum") return;
     lookupEns(node.id).then(setEnsName).catch(() => setEnsName(null));
   }, [node?.id, chain]);
+
+  // "Suivre l'argent" : charge les contreparties du nœud et les ajoute au graphe
+  const [expanding,   setExpanding]   = useState(false);
+  const [expandError, setExpandError] = useState<string | null>(null);
+  useEffect(() => { setExpandError(null); }, [node?.id]);
+
+  const blocker = node ? expandBlocker(node, graph, chain, mode) : "demo";
+
+  async function handleExpand() {
+    if (!node || blocker) return;
+    const id = node.id;
+    setExpanding(true);
+    setExpandError(null);
+    try {
+      const addition = await fetchWalletGraph(
+        { chain, address: id, depth: 1, minVolume: 100 },
+        { etherscanKey, heliusKey }
+      );
+      if (addition.isDemo) throw new Error("Clé Etherscan requise pour explorer");
+      const current = useVizStore.getState().graph;
+      if (current) setGraph(mergeExpansion(current, addition, id));
+    } catch (e) {
+      setExpandError(e instanceof Error ? e.message : "Erreur de chargement");
+    } finally {
+      setExpanding(false);
+    }
+  }
 
   const inflowVolume  = connectedLinks
     .filter((l) => l.target.id === selectedId)
@@ -123,6 +157,29 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
               ))}
             </div>
           )}
+
+          {/* Suivre l'argent */}
+          <div className="px-4 py-2.5 border-t border-white/6">
+            <button
+              onClick={handleExpand}
+              disabled={!!blocker || expanding}
+              title={blocker ? EXPAND_BLOCKER_LABEL[blocker] : "Ajouter les contreparties de ce nœud au graphe"}
+              className="w-full rounded-md border border-violet-500/25 bg-violet-500/10 py-1.5 text-xs font-mono text-violet-300 transition-colors hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {expanding ? (
+                <span className="flex items-center justify-center gap-2">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border border-violet-300/30 border-t-violet-300" />
+                  Chargement…
+                </span>
+              ) : node.expanded ? "✓ Transactions explorées" : "⤢ Explorer ses transactions"}
+            </button>
+            {blocker && blocker !== "expanded" && (
+              <p className="mt-1.5 text-xs font-mono text-white/30">{EXPAND_BLOCKER_LABEL[blocker]}</p>
+            )}
+            {expandError && (
+              <p className="mt-1.5 text-xs font-mono text-amber-300/70">⚠ {expandError}</p>
+            )}
+          </div>
 
           {/* Connexions */}
           {connectedLinks.length > 0 && (

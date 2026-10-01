@@ -71,7 +71,15 @@
 - Liens : liste des symboles échangés ; panneau de détail : actifs du nœud et de chaque connexion
 - 17 tests (adapters jetons sur réponses réelles, registre, prix, Etherscan V2)
 
+### Ajouté — suivre l'argent
+- Bouton « Explorer ses transactions » dans le panneau de détail : charge les contreparties du nœud et les fusionne au graphe (`lib/expand.ts`), à répéter de proche en proche
+- Le lien vu des deux côtés n'est pas doublé ; le focal d'origine reste le centre ; nœuds explorés entourés d'un anneau
+- Positions conservées entre deux simulations : les nœuds déjà affichés ne bougent plus, les nouveaux apparaissent près de leur voisin
+- Bouton désactivé (avec raison) sur données de démo, nœuds agrégés, hors mode Wallet
+- 10 tests (fusion, conditions d'exploration, positions initiales)
+
 ### Corrigé
+- Au-delà du budget de nœuds, le clustering recréait le graphe à chaque rendu et relançait la simulation en boucle (mémoïsation)
 - Etherscan V1 désactivé par Etherscan → passage à l'API V2 (le mode Ethereum réel ne fonctionnait plus)
 - Erreurs Etherscan : message détaillé ("Invalid API Key"…) au lieu de "NOTOK" ; adresse sans transaction = graphe vide, pas une erreur
 
