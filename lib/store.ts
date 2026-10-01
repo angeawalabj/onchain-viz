@@ -2,14 +2,27 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { GraphData, ViewMode, VizStore } from "./types";
+import type { VizStore } from "./types";
+import { isModeSupported } from "./chains";
 
 export const useVizStore = create<VizStore>()(
   persist(
     (set) => ({
+      // Chaîne — repasse en mode wallet si le mode actif n'y est pas disponible
+      chain:    "ethereum",
+      setChain: (chain) => set((s) => ({
+        chain,
+        mode:         isModeSupported(chain, s.mode) ? s.mode : "wallet",
+        graph:        null,
+        error:        null,
+        selectedNode: null,
+      })),
+
       // Mode
       mode:    "wallet",
-      setMode: (mode) => set({ mode, graph: null, error: null, selectedNode: null }),
+      setMode: (mode) => set((s) => isModeSupported(s.chain, mode)
+        ? { mode, graph: null, error: null, selectedNode: null }
+        : {}),
 
       // Données
       graph:     null,
@@ -31,15 +44,18 @@ export const useVizStore = create<VizStore>()(
       etherscanKey: "",
       alchemyKey:   "",
       graphApiKey:  "",
+      heliusKey:    "",
       setApiKeys:   (keys) => set(keys),
     }),
     {
       name:    "onchain-viz-store",
-      // Ne persiste que les clés API et le mode — pas le graphe
+      // Ne persiste que les clés API, la chaîne et le mode — pas le graphe
       partialize: (s) => ({
         etherscanKey: s.etherscanKey,
         alchemyKey:   s.alchemyKey,
         graphApiKey:  s.graphApiKey,
+        heliusKey:    s.heliusKey,
+        chain:        s.chain,
         mode:         s.mode,
         autoRotate:   s.autoRotate,
       }),

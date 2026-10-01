@@ -5,11 +5,17 @@
  */
 
 import type {
-  GraphData, GraphLink, GraphNode,
+  Chain, GraphData, GraphLink, GraphNode,
   WalletGraphParams, DefiGraphParams, ContractGraphParams,
   NodeType,
 } from "./types";
 import { shortAddr } from "./types";
+import { CHAINS } from "./chains";
+import { getUsdPrice } from "./prices";
+import { deltasToTransfers, type NativeTransfer, type TxDeltas } from "./adapters/deltas";
+import { fetchSolanaTxDeltas } from "./adapters/solana";
+import { fetchSuiTxDeltas } from "./adapters/sui";
+import { fetchHederaTxDeltas } from "./adapters/hedera";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -18,49 +24,60 @@ function checksumAddr(addr: string): string {
 }
 
 /** Classe une adresse : exchange connu, contract, ou wallet */
-const KNOWN_EXCHANGES: Record<string, string> = {
-  "0x3fc91a3afd70395cd496c647d5a6cc9d4b2b7fad": "Uniswap Router",
-  "0x00000000219ab540356cbb839cbe05303d7705fa": "ETH2 Deposit",
-  "0xd8da6bf26964af9d7eed9e03e53415d37aa96045": "vitalik.eth",
-  "0x28c6c06298d514db089934071355e5743bf21d60": "Binance",
-  "0x21a31ee1afc51d94c2efccaa2092ad1028285549": "Binance",
-  "0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0be": "Binance",
-};
-
-function classifyAddress(addr: string): { type: NodeType; label: string } {
-  const lower = addr.toLowerCase();
-  if (KNOWN_EXCHANGES[lower]) {
-    return { type: "exchange", label: KNOWN_EXCHANGES[lower] };
-  }
+function classifyAddress(addr: string, chain: Chain = "ethereum"): { type: NodeType; label: string } {
+  const cfg   = CHAINS[chain];
+  const known = cfg.knownLabels[cfg.normalize(addr)];
+  if (known) return { type: "exchange", label: known };
   return { type: "wallet", label: shortAddr(addr) };
 }
 
-// ─── Mode Wallet — Etherscan API ──────────────────────────────────────────────
+// ─── Mode Wallet — multi-chaînes ──────────────────────────────────────────────
+
+export interface WalletApiKeys {
+  etherscanKey: string;
+  heliusKey:    string;
+}
 
 export async function fetchWalletGraph(
   params: WalletGraphParams,
-  etherscanKey: string
+  keys: WalletApiKeys
 ): Promise<GraphData> {
-  if (!etherscanKey) return mockWalletGraph(params.address);
+  const { chain, minVolume } = params;
+  const address = CHAINS[chain].normalize(params.address);
 
-  const { address, minVolume } = params;
-  const base = "https://api.etherscan.io/api";
+  let transfers: NativeTransfer[];
+  if (chain === "ethereum") {
+    if (!keys.etherscanKey) return mockWalletGraph(address, chain);
+    transfers = await fetchEtherscanTransfers(address, keys.etherscanKey);
+  } else {
+    const txs: TxDeltas[] =
+      chain === "solana" ? await fetchSolanaTxDeltas(address, keys.heliusKey)
+      : chain === "sui"  ? await fetchSuiTxDeltas(address)
+      :                    await fetchHederaTxDeltas(address);
+    transfers = txs.flatMap((tx) => deltasToTransfers(address, tx));
+  }
 
-  // Récupère les 100 dernières transactions normales
-  const url = `${base}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${etherscanKey}`;
-  const res  = await fetch(url);
-  const data = await res.json();
+  const price = await getUsdPrice(chain);
+  const graph = buildWalletGraph(chain, address, transfers, price, minVolume);
+  if (graph.links.length === 0) {
+    throw new Error(`Aucun transfert ${CHAINS[chain].symbol} ≥ $${minVolume} dans les dernières transactions`);
+  }
+  return graph;
+}
 
-  if (data.status !== "1") throw new Error(data.message || "Etherscan error");
-
-  const txs: EtherscanTx[] = data.result;
-
-  // Construit le graphe
+/** Agrège des transferts focal ↔ pairs en nœuds + liens (un lien par sens). */
+export function buildWalletGraph(
+  chain: Chain,
+  address: string,
+  transfers: NativeTransfer[],
+  priceUSD: number,
+  minVolume: number
+): GraphData {
   const nodeMap = new Map<string, GraphNode>();
   const linkMap = new Map<string, GraphLink>();
 
   // Nœud central
-  const { type: centerType, label: centerLabel } = classifyAddress(address);
+  const { type: centerType, label: centerLabel } = classifyAddress(address, chain);
   nodeMap.set(address, {
     id:           address,
     type:         centerType,
@@ -71,18 +88,16 @@ export async function fetchWalletGraph(
     isFocused:    true,
   });
 
-  for (const tx of txs) {
-    const valueEth = parseInt(tx.value) / 1e18;
-    const valueUSD = valueEth * 3000; // approximation ETH~$3000
-    if (valueUSD < minVolume) continue;
+  for (const t of transfers) {
+    const valueUSD = t.amount * priceUSD;
+    if (!t.peer || t.peer === address || valueUSD < minVolume) continue;
 
-    const peer     = tx.from.toLowerCase() === address.toLowerCase() ? tx.to : tx.from;
-    const peerAddr = checksumAddr(peer);
-    const isOut    = tx.from.toLowerCase() === address.toLowerCase();
+    const peerAddr = CHAINS[chain].normalize(t.peer);
+    const isOut    = t.isOut;
 
     // Nœud pair
     if (!nodeMap.has(peerAddr)) {
-      const { type, label } = classifyAddress(peerAddr);
+      const { type, label } = classifyAddress(peerAddr, chain);
       nodeMap.set(peerAddr, {
         id: peerAddr, type, label,
         volume: 0, txCount: 0,
@@ -115,7 +130,7 @@ export async function fetchWalletGraph(
         volume:    valueUSD,
         txCount:   1,
         direction: isOut ? "out" : "in",
-        timestamp: parseInt(tx.timeStamp),
+        timestamp: t.timestamp,
       });
     }
   }
@@ -126,6 +141,30 @@ export async function fetchWalletGraph(
     centerAddress: address,
     fetchedAt:     Date.now(),
   };
+}
+
+// ─── Adapter Ethereum — Etherscan API ─────────────────────────────────────────
+
+async function fetchEtherscanTransfers(address: string, etherscanKey: string): Promise<NativeTransfer[]> {
+  const base = "https://api.etherscan.io/api";
+
+  // Récupère les 100 dernières transactions normales
+  const url = `${base}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=${etherscanKey}`;
+  const res  = await fetch(url);
+  const data = await res.json();
+
+  if (data.status !== "1") throw new Error(data.message || "Etherscan error");
+
+  const txs: EtherscanTx[] = data.result;
+  return txs.map((tx) => {
+    const isOut = tx.from.toLowerCase() === address;
+    return {
+      peer:      (isOut ? tx.to : tx.from).toLowerCase(),   // to vide = création de contrat
+      isOut,
+      amount:    Number(tx.value) / 1e18,
+      timestamp: parseInt(tx.timeStamp),
+    };
+  });
 }
 
 interface EtherscanTx {
@@ -294,20 +333,48 @@ export async function fetchContractGraph(
 
 // ─── Mock data (fallback sans clé API) ───────────────────────────────────────
 
-export function mockWalletGraph(address: string): GraphData {
-  const center = checksumAddr(address || "0xd8da6bf26964af9d7eed9e03e53415d37aa96045");
+const MOCK_EXCHANGES: Record<Chain, string[]> = {
+  ethereum: ["Binance", "Coinbase", "Uniswap", "Aave", "Curve"],
+  solana:   ["Binance", "Coinbase", "Jupiter", "Raydium", "Kraken"],
+  sui:      ["Binance", "OKX", "Cetus", "Turbos", "Bybit"],
+  hedera:   ["Binance", "OKX", "SaucerSwap", "HashPack", "Bitfinex"],
+};
+
+const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/** Identifiant factice au format de la chaîne (unique par index). */
+function mockPeerId(chain: Chain, i: number): string {
+  switch (chain) {
+    case "ethereum": return `0x${i.toString(16).padStart(40, "0")}`;
+    case "sui":      return `0x${i.toString(16).padStart(64, "0")}`;
+    case "hedera":   return `0.0.${1_000_000 + i * 137}`;
+    case "solana": {
+      let n = i, tail = "";
+      do { tail = BASE58[n % 58] + tail; n = Math.floor(n / 58); } while (n > 0);
+      return ("Demo" + tail).padEnd(44, "1");
+    }
+  }
+}
+
+export function mockWalletGraph(address: string, chain: Chain = "ethereum"): GraphData {
+  const cfg    = CHAINS[chain];
+  const center = cfg.normalize(address || cfg.presets[0].address);
+  const names  = MOCK_EXCHANGES[chain];
   const peers  = Array.from({ length: 24 }, (_, i) => ({
-    id:           `0x${i.toString(16).padStart(40, "0")}`,
+    id:           mockPeerId(chain, i),
     type:         (["wallet", "exchange", "contract"] as NodeType[])[i % 3],
-    label:        i % 5 === 0 ? ["Binance", "Coinbase", "Uniswap", "Aave", "Curve"][Math.floor(i/5)] : shortAddr(`0x${i.toString(16).padStart(40,"0")}`),
+    label:        i % 5 === 0 ? names[Math.floor(i/5)] : shortAddr(mockPeerId(chain, i)),
     volume:       Math.pow(Math.random(), 2) * 5_000_000,
     txCount:      Math.floor(Math.random() * 200) + 1,
     isSmartMoney: i < 3,
     isFocused:    false,
   }));
 
+  const centerLabel = cfg.presets.find((p) => cfg.normalize(p.address) === center)?.label
+    ?? classifyAddress(center, chain).label;
+
   const nodes: GraphNode[] = [
-    { id: center, type: "wallet", label: "vitalik.eth", volume: 12_000_000, txCount: 1847, isSmartMoney: true, isFocused: true },
+    { id: center, type: "wallet", label: centerLabel, volume: 12_000_000, txCount: 1847, isSmartMoney: true, isFocused: true },
     ...peers,
   ];
 

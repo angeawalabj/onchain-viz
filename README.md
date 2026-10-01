@@ -1,6 +1,6 @@
 # OnChain Viz — 3D Blockchain Explorer
 
-Visualisation 3D interactive des données on-chain Ethereum. Graphe de transactions wallet, liquidité DeFi (Uniswap V3, Aave), activité de smart contracts — avec un aesthetic level Bubblemaps.
+Visualisation 3D interactive des données on-chain — **Ethereum, Solana, Sui et Hedera**. Graphe de transactions wallet, liquidité DeFi (Uniswap V3, Aave), activité de smart contracts — avec un aesthetic level Bubblemaps.
 
 ## Stack
 
@@ -11,7 +11,7 @@ Visualisation 3D interactive des données on-chain Ethereum. Graphe de transacti
 | Post-processing | @react-three/postprocessing (bloom, vignette) |
 | Layout graphe | d3-force-3d (simulation 3D) |
 | State | Zustand (persistance localStorage) |
-| Data | Etherscan API + The Graph + Alchemy |
+| Data | Etherscan, The Graph, Alchemy (Ethereum) · RPC Solana · GraphQL Sui · Mirror Node Hedera · CoinGecko (prix) |
 | Style | Tailwind CSS + JetBrains Mono |
 | Deploy | Vercel (gratuit, permanent) |
 
@@ -24,6 +24,17 @@ Visualisation 3D interactive des données on-chain Ethereum. Graphe de transacti
 | **Contract Activity** | Appelants d'un smart contract, fréquence, volume | Alchemy (free) |
 
 Sans clé API → données de démo (25 nœuds réalistes).
+
+### Chaînes supportées (mode Wallet Graph)
+
+| Chaîne | Format d'adresse | Source | Clé API |
+|--------|------------------|--------|---------|
+| Ethereum | `0x…` (40 hex) ou nom ENS | Etherscan | requise (sinon démo) |
+| Solana | base58 | RPC publicnode / Helius | optionnelle |
+| Sui | `0x…` (64 hex) ou nom `.sui` | GraphQL Sui | aucune |
+| Hedera | `0.0.N` | Mirror Node | aucune |
+
+Les modes DeFi et Contract restent pour l'instant Ethereum uniquement. Détails et contraintes des API : [ADR-0003](docs/ADR-0003-multi-chain.md).
 
 ## Démarrage local
 
@@ -63,11 +74,15 @@ onchain-viz/
 ├── lib/
 │   ├── types.ts          ← Types, palette, helpers
 │   ├── store.ts          ← Zustand store global
-│   ├── fetchers.ts       ← Etherscan, The Graph, Alchemy + mocks
+│   ├── chains.ts         ← Config par chaîne (adresses, presets, explorateurs)
+│   ├── prices.ts         ← Prix USD (CoinGecko + fallback)
+│   ├── fetchers.ts       ← Graphe wallet multi-chaînes, The Graph, Alchemy + mocks
+│   ├── adapters/         ← deltas (règle commune), solana, sui, hedera
 │   └── useForceGraph.ts  ← Hook d3-force-3d simulation
 └── docs/
     ├── ADR-0001-stack.md
-    └── ADR-0002-design.md
+    ├── ADR-0002-design.md
+    └── ADR-0003-multi-chain.md
 ```
 
 ## Optimisations performance
