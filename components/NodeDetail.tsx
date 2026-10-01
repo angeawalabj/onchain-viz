@@ -6,6 +6,7 @@ import { useVizStore } from "../lib/store";
 import { nodeColor, formatUSD, PALETTE } from "../lib/types";
 import type { SimNode, SimLink } from "../lib/useForceGraph";
 import { lookupEns } from "../lib/ens";
+import { CHAINS } from "../lib/chains";
 
 interface NodeDetailProps {
   nodes: SimNode[];
@@ -15,6 +16,7 @@ interface NodeDetailProps {
 export function NodeDetail({ nodes, links }: NodeDetailProps) {
   const selectedId  = useVizStore((s) => s.selectedNode);
   const setSelected = useVizStore((s) => s.setSelected);
+  const chain       = useVizStore((s) => s.chain);
 
   const node = nodes.find((n) => n.id === selectedId);
 
@@ -23,13 +25,13 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
     (l) => l.source.id === selectedId || l.target.id === selectedId
   );
 
-  // Lookup ENS name for the selected node (best-effort, async)
+  // Lookup ENS name for the selected node (best-effort, async, Ethereum uniquement)
   const [ensName, setEnsName] = useState<string | null>(null);
   useEffect(() => {
-    if (!node) { setEnsName(null); return; }
     setEnsName(null);
+    if (!node || chain !== "ethereum") return;
     lookupEns(node.id).then(setEnsName).catch(() => setEnsName(null));
-  }, [node?.id]);
+  }, [node?.id, chain]);
 
   const inflowVolume  = connectedLinks
     .filter((l) => l.target.id === selectedId)
@@ -139,18 +141,9 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
 
           {/* Liens externes */}
           <div className="flex gap-2 px-4 py-3 border-t border-white/6">
-            <ExternalLink
-              href={`https://etherscan.io/address/${node.id}`}
-              label="Etherscan"
-            />
-            <ExternalLink
-              href={`https://app.zerion.io/${node.id}`}
-              label="Zerion"
-            />
-            <ExternalLink
-              href={`https://debank.com/profile/${node.id}`}
-              label="DeBank"
-            />
+            {CHAINS[chain].explorerLinks(node.id).map((l) => (
+              <ExternalLink key={l.label} href={l.href} label={l.label} />
+            ))}
           </div>
         </motion.div>
       )}

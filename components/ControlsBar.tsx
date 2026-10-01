@@ -91,12 +91,14 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
   const etherscanKey = useVizStore((s) => s.etherscanKey);
   const alchemyKey   = useVizStore((s) => s.alchemyKey);
   const graphApiKey  = useVizStore((s) => s.graphApiKey);
+  const heliusKey    = useVizStore((s) => s.heliusKey);
   const setApiKeys   = useVizStore((s) => s.setApiKeys);
 
   const [keys, setKeys] = useState({
     etherscanKey,
     alchemyKey,
     graphApiKey,
+    heliusKey,
   });
 
   function handleSave() {
@@ -108,13 +110,15 @@ function ApiKeyPanel({ onClose }: { onClose: () => void }) {
     <div className="border-t border-white/6 px-4 py-4 bg-black/40">
       <p className="text-xs font-mono text-white/40 mb-3">
         Les clés sont stockées localement (localStorage) — jamais envoyées à un serveur.
-        Sans clé, des données de démo sont affichées.
+        Sans clé, des données de démo sont affichées (Ethereum). Solana, Sui et Hedera
+        fonctionnent sans clé via des endpoints publics.
       </p>
       <div className="grid grid-cols-1 gap-2 mb-3">
         {[
           { key: "etherscanKey", label: "Etherscan API Key", placeholder: "Wallet graph mode", href: "https://etherscan.io/apis" },
           { key: "alchemyKey",   label: "Alchemy API Key",   placeholder: "Contract activity mode", href: "https://dashboard.alchemy.com" },
           { key: "graphApiKey",  label: "The Graph API Key",  placeholder: "DeFi liquidity mode", href: "https://thegraph.com/studio" },
+          { key: "heliusKey",    label: "Helius API Key",     placeholder: "Solana (optionnel, plus de débit)", href: "https://dashboard.helius.dev" },
         ].map(({ key, label, placeholder, href }) => (
           <div key={key}>
             <div className="flex items-center justify-between mb-1">

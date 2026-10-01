@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import { useVizStore } from "../lib/store";
 import { resolveAddress } from "../lib/ens";
+import { resolveSuiName } from "../lib/adapters/sui";
+import { CHAINS, CHAIN_IDS, isModeSupported } from "../lib/chains";
 import {
   fetchWalletGraph,
   fetchDefiGraph,
@@ -12,7 +14,7 @@ import {
   mockDefiGraph,
   mockContractGraph,
 } from "../lib/fetchers";
-import type { ViewMode } from "../lib/types";
+import type { Chain, ViewMode } from "../lib/types";
 
 const MODE_CONFIG: Record<ViewMode, {
   label:       string;
@@ -46,12 +48,8 @@ const DEFI_PROTOCOLS = [
   { value: "curve",      label: "Curve" },
 ] as const;
 
-const PRESET_ADDRESSES: Record<ViewMode, { label: string; address: string }[]> = {
-  wallet: [
-    { label: "vitalik.eth", address: "0xd8da6bf26964af9d7eed9e03e53415d37aa96045" },
-    { label: "Binance Hot", address: "0x28c6c06298d514db089934071355e5743bf21d60" },
-    { label: "Wintermute", address: "0x0000006daea1723962647b7e189d311d757fb793" },
-  ],
+// Presets wallet : définis par chaîne dans lib/chains.ts
+const PRESET_ADDRESSES: Record<Exclude<ViewMode, "wallet">, { label: string; address: string }[]> = {
   defi: [],
   contract: [
     { label: "USDC",      address: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48" },
@@ -60,12 +58,28 @@ const PRESET_ADDRESSES: Record<ViewMode, { label: string; address: string }[]> =
   ],
 };
 
+/** Résout l'entrée utilisateur en adresse valide pour la chaîne (ENS, SuiNS, ou format natif). */
+async function resolveInput(input: string, chain: Chain): Promise<string> {
+  const value = input.trim();
+  if (chain === "ethereum") return resolveAddress(value);
+  if (chain === "sui" && value.toLowerCase().endsWith(".sui")) return resolveSuiName(value.toLowerCase());
+
+  const cfg = CHAINS[chain];
+  if (!cfg.isValidAddress(value)) {
+    throw new Error(`"${value}" n'est pas valide sur ${cfg.label} — attendu : ${cfg.addressHint}`);
+  }
+  return cfg.normalize(value);
+}
+
 export function SearchPanel() {
+  const chain          = useVizStore((s) => s.chain);
+  const setChain       = useVizStore((s) => s.setChain);
   const mode           = useVizStore((s) => s.mode);
   const setMode        = useVizStore((s) => s.setMode);
   const etherscanKey   = useVizStore((s) => s.etherscanKey);
   const alchemyKey     = useVizStore((s) => s.alchemyKey);
   const graphApiKey    = useVizStore((s) => s.graphApiKey);
+  const heliusKey      = useVizStore((s) => s.heliusKey);
   const setGraph       = useVizStore((s) => s.setGraph);
 
   const [address,    setAddress]   = useState("");
@@ -73,7 +87,10 @@ export function SearchPanel() {
   const [isPending,  startTransition] = useTransition();
   const [error,      setError]     = useState<string | null>(null);
 
-  const cfg = MODE_CONFIG[mode];
+  const cfg      = MODE_CONFIG[mode];
+  const chainCfg = CHAINS[chain];
+  const presets  = mode === "wallet" ? chainCfg.presets : PRESET_ADDRESSES[mode];
+  const placeholder = mode === "wallet" ? chainCfg.placeholder : cfg.placeholder;
 
   async function handleFetch() {
     setError(null);
@@ -82,14 +99,14 @@ export function SearchPanel() {
         let graph;
         if (mode === "wallet") {
           if (address) {
-            // Résolution ENS si nécessaire (ex: vitalik.eth → 0x...)
-            const resolved = await resolveAddress(address.trim());
+            // Résolution ENS / SuiNS si nécessaire (ex: vitalik.eth → 0x...)
+            const resolved = await resolveInput(address, chain);
             graph = await fetchWalletGraph(
-              { address: resolved, depth: 1, minVolume: 100 },
-              etherscanKey
+              { chain, address: resolved, depth: 1, minVolume: 100 },
+              { etherscanKey, heliusKey }
             );
           } else {
-            graph = mockWalletGraph("0xd8da6bf26964af9d7eed9e03e53415d37aa96045");
+            graph = mockWalletGraph("", chain);
           }
         } else if (mode === "defi") {
           graph = await fetchDefiGraph({ protocol, topN: 20 }, graphApiKey);
@@ -112,7 +129,7 @@ export function SearchPanel() {
         const mock = mode === "defi"
           ? mockDefiGraph()
           : mode === "wallet"
-          ? mockWalletGraph(address || "0xd8da6bf26964af9d7eed9e03e53415d37aa96045")
+          ? mockWalletGraph(chainCfg.isValidAddress(address.trim()) ? address.trim() : "", chain)
           : mockContractGraph(address || "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48");
         setGraph(mock);
       }
@@ -125,22 +142,45 @@ export function SearchPanel() {
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Mode selector */}
-      <div className="flex gap-1 rounded-lg bg-white/5 p-1">
-        {(Object.keys(MODE_CONFIG) as ViewMode[]).map((m) => (
+      {/* Chain selector */}
+      <div className="grid grid-cols-4 gap-1 rounded-lg bg-white/5 p-1">
+        {CHAIN_IDS.map((c) => (
           <button
-            key={m}
-            onClick={() => { setMode(m); setAddress(""); setError(null); }}
-            className={`flex-1 rounded-md px-2 py-1.5 text-xs font-mono transition-all ${
-              mode === m
-                ? "bg-violet-500/20 text-violet-300 shadow-inner"
+            key={c}
+            onClick={() => { setChain(c); setAddress(""); setError(null); }}
+            className={`flex items-center justify-center gap-1.5 rounded-md px-1 py-1.5 text-xs font-mono transition-all ${
+              chain === c
+                ? "bg-white/10 text-white/85 shadow-inner"
                 : "text-white/40 hover:text-white/60"
             }`}
           >
-            <span className="mr-1.5">{MODE_CONFIG[m].icon}</span>
-            {MODE_CONFIG[m].label}
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: CHAINS[c].color }} />
+            {CHAINS[c].label}
           </button>
         ))}
+      </div>
+
+      {/* Mode selector */}
+      <div className="flex gap-1 rounded-lg bg-white/5 p-1">
+        {(Object.keys(MODE_CONFIG) as ViewMode[]).map((m) => {
+          const supported = isModeSupported(chain, m);
+          return (
+            <button
+              key={m}
+              disabled={!supported}
+              title={supported ? undefined : `Pas encore disponible sur ${chainCfg.label}`}
+              onClick={() => { setMode(m); setAddress(""); setError(null); }}
+              className={`flex-1 rounded-md px-2 py-1.5 text-xs font-mono transition-all disabled:cursor-not-allowed disabled:opacity-30 ${
+                mode === m
+                  ? "bg-violet-500/20 text-violet-300 shadow-inner"
+                  : "text-white/40 hover:text-white/60"
+              }`}
+            >
+              <span className="mr-1.5">{MODE_CONFIG[m].icon}</span>
+              {MODE_CONFIG[m].label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Input */}
@@ -150,7 +190,7 @@ export function SearchPanel() {
             value={address}
             onChange={(e) => setAddress(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleFetch()}
-            placeholder={cfg.placeholder}
+            placeholder={placeholder}
             spellCheck={false}
             className="w-full rounded-lg border border-white/8 bg-white/4 px-3 py-2.5 pr-10 text-xs font-mono text-white/80 placeholder-white/25 outline-none transition focus:border-violet-500/50 focus:bg-white/6"
           />
@@ -179,9 +219,9 @@ export function SearchPanel() {
       )}
 
       {/* Presets */}
-      {PRESET_ADDRESSES[mode].length > 0 && (
+      {presets.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {PRESET_ADDRESSES[mode].map((p) => (
+          {presets.map((p) => (
             <button
               key={p.address}
               onClick={() => handlePreset(p.address)}

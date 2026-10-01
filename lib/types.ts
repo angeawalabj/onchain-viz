@@ -37,10 +37,12 @@ export type NodeType =
 
 export type ViewMode = "wallet" | "defi" | "contract";
 
+export type Chain = "ethereum" | "solana" | "sui" | "hedera";
+
 // ─── Structures de données graphe ─────────────────────────────────────────────
 
 export interface GraphNode {
-  id:          string;           // adresse Ethereum checksummed
+  id:          string;           // adresse normalisée selon la chaîne
   type:        NodeType;
   label:       string;           // ENS ou adresse tronquée
   volume:      number;           // en USD
@@ -71,6 +73,7 @@ export interface GraphData {
 // ─── Modes de visualisation ────────────────────────────────────────────────────
 
 export interface WalletGraphParams {
+  chain:     Chain;
   address:   string;
   depth:     1 | 2;             // 1 = voisins directs, 2 = voisins de voisins
   minVolume: number;            // filtre les tx sous ce seuil USD
@@ -91,6 +94,10 @@ export interface ContractGraphParams {
 // ─── Store Zustand ────────────────────────────────────────────────────────────
 
 export interface VizStore {
+  // Chaîne active
+  chain:        Chain;
+  setChain:     (c: Chain) => void;
+
   // Mode actif
   mode:         ViewMode;
   setMode:      (m: ViewMode) => void;
@@ -115,12 +122,15 @@ export interface VizStore {
   etherscanKey: string;
   alchemyKey:   string;
   graphApiKey:  string;
-  setApiKeys:   (keys: Partial<Pick<VizStore, "etherscanKey" | "alchemyKey" | "graphApiKey">>) => void;
+  heliusKey:    string;
+  setApiKeys:   (keys: Partial<Pick<VizStore, "etherscanKey" | "alchemyKey" | "graphApiKey" | "heliusKey">>) => void;
 }
 
 // ─── Helpers adresses ─────────────────────────────────────────────────────────
 
 export function shortAddr(addr: string): string {
+  // Les identifiants courts (ex: compte Hedera 0.0.12345) restent entiers
+  if (addr.length <= 14) return addr;
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 

@@ -53,6 +53,17 @@
 
 ## [Unreleased]
 
+### Ajouté — multi-chaînes (ADR-0003)
+- Sélecteur de chaîne : Ethereum, Solana, Sui, Hedera (mode Wallet Graph)
+- `lib/chains.ts` — format d'adresse, presets, explorateurs et labels par chaîne
+- Adapters sans clé API : Solana (RPC publicnode, Helius optionnel), Sui (GraphQL + SuiNS), Hedera (Mirror Node)
+- Transferts déduits des variations de solde (`lib/adapters/deltas.ts`), règle commune aux 3 chaînes
+- Prix USD via CoinGecko (cache 5 min, prix de secours) — remplace l'approximation ETH ≈ $3000
+- Données de démo au format de chaque chaîne ; liens explorateurs par chaîne (Solscan, Suiscan, HashScan…)
+- 25 tests (adapters sur réponses réelles, validation d'adresses, graphe wallet)
+
+### À venir
+
 - Support ENS pour les presets dans le sélecteur de collection
 - Historique des recherches (localStorage)
 - Export du graphe en PNG / SVG

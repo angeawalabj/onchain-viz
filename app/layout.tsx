@@ -3,8 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title:       "OnChain Viz — 3D Blockchain Explorer",
-  description: "Visualisation 3D interactive des données on-chain Ethereum. Graphe de transactions, liquidité DeFi, activité de contracts.",
-  keywords:    ["blockchain", "ethereum", "visualization", "3d", "defi", "onchain"],
+  description: "Visualisation 3D interactive des données on-chain multi-chaînes (Ethereum, Solana, Sui, Hedera). Graphe de transactions, liquidité DeFi, activité de contracts.",
+  keywords:    ["blockchain", "ethereum", "solana", "sui", "hedera", "visualization", "3d", "defi", "onchain"],
   icons: {
     icon: "/favicon.svg",
   },

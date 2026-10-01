@@ -35,13 +35,14 @@ export default function HomePage() {
   const graph      = useVizStore((s) => s.graph);
   const setGraph   = useVizStore((s) => s.setGraph);
   const mode = useVizStore((s) => s.mode);
+  const chain = useVizStore((s) => s.chain);
 
-  // Charge les données de démo au premier rendu
+  // Charge les données de démo de la chaîne active (au premier rendu et après changement de chaîne)
   useEffect(() => {
     if (!graph) {
-      setGraph(mockWalletGraph("0xd8da6bf26964af9d7eed9e03e53415d37aa96045"));
+      setGraph(mockWalletGraph("", chain));
     }
-  }, []);
+  }, [chain]);
 
   // Applique le clustering si le graphe dépasse le budget de nœuds (ADR-0002)
   const displayGraph = graph ? clusterGraph(graph, mode).graph : null;

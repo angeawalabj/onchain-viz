@@ -1,0 +1,153 @@
+import { describe, it, expect } from "vitest";
+import { deltasToTransfers } from "../lib/adapters/deltas";
+import { solanaTxToDeltas, type SolanaTx } from "../lib/adapters/solana";
+import { suiTxToDeltas, type SuiTx } from "../lib/adapters/sui";
+import { hederaTxToDeltas } from "../lib/adapters/hedera";
+
+// ─── deltasToTransfers ────────────────────────────────────────────────────────
+
+describe("deltasToTransfers", () => {
+  it("focal qui envoie → transferts sortants vers les pairs crédités", () => {
+    const out = deltasToTransfers("A", {
+      timestamp: 100,
+      deltas: [{ owner: "A", amount: -10 }, { owner: "B", amount: 10 }],
+    });
+    expect(out).toEqual([{ peer: "B", isOut: true, amount: 10, timestamp: 100 }]);
+  });
+
+  it("focal qui reçoit → transferts entrants depuis les pairs débités", () => {
+    const out = deltasToTransfers("A", {
+      timestamp: 100,
+      deltas: [{ owner: "B", amount: -5 }, { owner: "A", amount: 5 }, { owner: "C", amount: 3 }],
+    });
+    expect(out).toEqual([{ peer: "B", isOut: false, amount: 5, timestamp: 100 }]);
+  });
+
+  it("ramène les montants des pairs à la variation du focal", () => {
+    // A envoie 10, mais B et C reçoivent 40 au total (autre émetteur D)
+    const out = deltasToTransfers("A", {
+      timestamp: 0,
+      deltas: [
+        { owner: "A", amount: -10 },
+        { owner: "D", amount: -30 },
+        { owner: "B", amount: 30 },
+        { owner: "C", amount: 10 },
+      ],
+    });
+    const total = out.reduce((s, t) => s + t.amount, 0);
+    expect(total).toBeCloseTo(10);
+    expect(out.find((t) => t.peer === "B")!.amount).toBeCloseTo(7.5);
+  });
+
+  it("retourne [] si le focal n'est pas concerné", () => {
+    expect(deltasToTransfers("Z", {
+      timestamp: 0,
+      deltas: [{ owner: "A", amount: -1 }, { owner: "B", amount: 1 }],
+    })).toEqual([]);
+  });
+});
+
+// ─── Solana ───────────────────────────────────────────────────────────────────
+
+describe("solanaTxToDeltas", () => {
+  const tx: SolanaTx = {
+    blockTime: 1790827457,
+    transaction: { message: { accountKeys: [
+      "H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS",
+      "2ERPB2PMp4WaaUNFwb2EU4Exmv9hheydj5ekCV3w9P8n",
+      "11111111111111111111111111111111",
+    ] } },
+    meta: {
+      err: null,
+      preBalances:  [11435897396563, 0,       1],
+      postBalances: [11435895701623, 1488440, 1],
+      loadedAddresses: { writable: [], readonly: [] },
+    },
+  };
+
+  it("calcule les variations en SOL et ignore les comptes inchangés", () => {
+    const { timestamp, deltas } = solanaTxToDeltas(tx);
+    expect(timestamp).toBe(1790827457);
+    expect(deltas).toHaveLength(2);
+    expect(deltas[0].amount).toBeCloseTo(-0.00169494);
+    expect(deltas[1]).toEqual({ owner: "2ERPB2PMp4WaaUNFwb2EU4Exmv9hheydj5ekCV3w9P8n", amount: 0.00148844 });
+  });
+
+  it("inclut les comptes des lookup tables (transactions v0)", () => {
+    const v0: SolanaTx = {
+      blockTime: 1,
+      transaction: { message: { accountKeys: ["A"] } },
+      meta: { err: null, preBalances: [2e9, 0], postBalances: [1e9, 1e9], loadedAddresses: { writable: ["B"], readonly: [] } },
+    };
+    expect(solanaTxToDeltas(v0).deltas).toEqual([{ owner: "A", amount: -1 }, { owner: "B", amount: 1 }]);
+  });
+
+  it("ignore les transactions en échec", () => {
+    expect(solanaTxToDeltas({ ...tx, meta: { ...tx.meta!, err: { InstructionError: [0, "x"] } } }).deltas).toEqual([]);
+  });
+});
+
+// ─── Sui ──────────────────────────────────────────────────────────────────────
+
+describe("suiTxToDeltas", () => {
+  const SUI  = "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI";
+  const USDC = "0xdba34672e30cb065b1f93e3ab55318768fd6fef66c15942c9f7cb846e2f900e7::usdc::USDC";
+  const tx: SuiTx = {
+    effects: {
+      timestamp: "2026-10-01T04:01:48.872Z",
+      balanceChanges: { nodes: [
+        { owner: { address: "0xaaa" }, coinType: { repr: SUI },  amount: "-7236542087880" },
+        { owner: { address: "0xbbb" }, coinType: { repr: SUI },  amount: "6824200000000" },
+        { owner: { address: "0xaaa" }, coinType: { repr: USDC }, amount: "-3906585901" },
+        { owner: null,                 coinType: { repr: SUI },  amount: "1000" },
+      ] },
+    },
+  };
+
+  it("ne garde que le SUI natif détenu par des adresses", () => {
+    const { timestamp, deltas } = suiTxToDeltas(tx);
+    expect(timestamp).toBe(Date.parse("2026-10-01T04:01:48.872Z") / 1000);
+    expect(deltas).toEqual([
+      { owner: "0xaaa", amount: -7236.54208788 },
+      { owner: "0xbbb", amount: 6824.2 },
+    ]);
+  });
+});
+
+// ─── Hedera ───────────────────────────────────────────────────────────────────
+
+describe("hederaTxToDeltas", () => {
+  const tx = {
+    consensus_timestamp: "1790708548.574814721",
+    result: "SUCCESS",
+    transfers: [
+      { account: "0.0.800",      amount: -438477832800 },
+      { account: "0.0.802",      amount: 177993 },
+      { account: "0.0.10521365", amount: -7372273722345193 },
+      { account: "0.0.10881452", amount: 7372712200000000 },
+    ],
+  };
+
+  it("exclut les comptes système (frais, staking) et convertit en HBAR", () => {
+    const { timestamp, deltas } = hederaTxToDeltas(tx, "0.0.10881452");
+    expect(timestamp).toBe(1790708548);
+    expect(deltas.map((d) => d.owner)).toEqual(["0.0.10521365", "0.0.10881452"]);
+    expect(deltas[1].amount).toBeCloseTo(73_727_122);
+  });
+
+  it("garde le compte focal même s'il est un compte système", () => {
+    const { deltas } = hederaTxToDeltas(tx, "0.0.800");
+    expect(deltas.some((d) => d.owner === "0.0.800")).toBe(true);
+  });
+
+  it("ignore les transactions en échec", () => {
+    expect(hederaTxToDeltas({ ...tx, result: "INSUFFICIENT_PAYER_BALANCE" }, "0.0.10881452").deltas).toEqual([]);
+  });
+
+  it("produit un transfert entrant de bout en bout", () => {
+    const transfers = deltasToTransfers("0.0.10881452", hederaTxToDeltas(tx, "0.0.10881452"));
+    expect(transfers).toHaveLength(1);
+    expect(transfers[0].peer).toBe("0.0.10521365");
+    expect(transfers[0].isOut).toBe(false);
+  });
+});
