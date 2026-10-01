@@ -71,6 +71,13 @@
 - Liens : liste des symboles échangés ; panneau de détail : actifs du nœud et de chaque connexion
 - 17 tests (adapters jetons sur réponses réelles, registre, prix, Etherscan V2)
 
+### Ajouté — rejeu dans le temps
+- Barre de rejeu sous la scène : lecture/pause, curseur, date courante, retour au graphe complet (`components/Timeline.tsx`)
+- Chaque lien garde ses transferts datés (`GraphLink.events`) ; à l'instant t, seuls les liens déjà actifs sont affichés, avec le volume cumulé jusqu'à t (`lib/replay.ts`)
+- La disposition est calculée une fois sur le graphe complet : le rejeu ne relance aucune simulation
+- Événements conservés par le clustering (fusion) et par l'exploration de nœuds (vue la plus complète)
+- 11 tests (bornes, filtrage, événements de bout en bout)
+
 ### Ajouté — suivre l'argent
 - Bouton « Explorer ses transactions » dans le panneau de détail : charge les contreparties du nœud et les fusionne au graphe (`lib/expand.ts`), à répéter de proche en proche
 - Le lien vu des deux côtés n'est pas doublé ; le focal d'origine reste le centre ; nœuds explorés entourés d'un anneau
@@ -79,6 +86,9 @@
 - 10 tests (fusion, conditions d'exploration, positions initiales)
 
 ### Corrigé
+- Deux simulations tournaient en parallèle (page + scène 3D) : CPU doublé, et la scène affichait le graphe non clusterisé. Une seule simulation, partagée
+- Particules de flux : tableau de progression dimensionné une seule fois → particules invalides (NaN) dès que le nombre de liens augmentait ; géométries remplacées désormais libérées
+- Bandeau « données démo » affiché seulement sur les données de démo
 - Au-delà du budget de nœuds, le clustering recréait le graphe à chaque rendu et relançait la simulation en boucle (mémoïsation)
 - Etherscan V1 désactivé par Etherscan → passage à l'API V2 (le mode Ethereum réel ne fonctionnait plus)
 - Erreurs Etherscan : message détaillé ("Invalid API Key"…) au lieu de "NOTOK" ; adresse sans transaction = graphe vide, pas une erreur

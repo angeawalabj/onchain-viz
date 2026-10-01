@@ -26,7 +26,7 @@ export const useVizStore = create<VizStore>()(
 
       // Données
       graph:     null,
-      setGraph:  (graph) => set({ graph, isLoading: false, error: null }),
+      setGraph:  (graph) => set({ graph, isLoading: false, error: null, replayTime: null }),
       isLoading: false,
       error:     null,
 
@@ -35,6 +35,10 @@ export const useVizStore = create<VizStore>()(
       setSelected:  (selectedNode) => set({ selectedNode }),
       hoveredNode:  null,
       setHovered:   (hoveredNode) => set({ hoveredNode }),
+
+      // Rejeu
+      replayTime:    null,
+      setReplayTime: (replayTime) => set({ replayTime }),
 
       // Caméra
       autoRotate:       false,

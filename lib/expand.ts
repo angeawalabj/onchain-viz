@@ -37,6 +37,8 @@ export function mergeExpansion(base: GraphData, addition: GraphData, expandedId:
     const key      = linkId(l);
     const existing = links.get(key);
     if (existing) {
+      // Mêmes transferts vus des deux côtés : on garde la vue la plus complète
+      if (l.volume > existing.volume) existing.events = l.events;
       existing.volume  = Math.max(existing.volume, l.volume);
       existing.txCount = Math.max(existing.txCount, l.txCount);
       existing.assets  = Array.from(new Set([...(existing.assets ?? []), ...(l.assets ?? [])]));

@@ -10,6 +10,7 @@
  */
 
 import type { GraphData, GraphNode, GraphLink } from "./types";
+import { linkEvents } from "./replay";
 
 const MAX_NODES: Record<string, number> = {
   wallet:   150,
@@ -89,6 +90,7 @@ export function clusterGraph(
     const key = `${newSrc}→${newTgt}`;
     if (linkMap.has(key)) {
       const existing   = linkMap.get(key)!;
+      existing.events   = [...linkEvents(existing), ...linkEvents(link)];
       existing.volume  += link.volume;
       existing.txCount += link.txCount;
       if (link.assets) {
