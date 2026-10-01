@@ -36,9 +36,40 @@ export interface SimResult {
   settled: boolean;
 }
 
+type Vec3 = { x: number; y: number; z: number };
+
+const jitter = (r: number) => (Math.random() - 0.5) * r;
+
+/**
+ * Position de départ : la dernière connue (le graphe ne "saute" pas quand on
+ * déplie un nœud), sinon près d'un voisin déjà placé, sinon aléatoire.
+ */
+export function initialPositions(
+  ids: string[],
+  links: { source: string; target: string }[],
+  known: Map<string, Vec3>
+): Map<string, Vec3> {
+  const out = new Map<string, Vec3>();
+  for (const id of ids) {
+    const prev = known.get(id);
+    if (prev) { out.set(id, { ...prev }); continue; }
+
+    const neighbor = links
+      .map((l) => (l.source === id ? l.target : l.target === id ? l.source : null))
+      .map((nid) => (nid ? known.get(nid) : undefined))
+      .find((p): p is Vec3 => !!p);
+
+    out.set(id, neighbor
+      ? { x: neighbor.x + jitter(4), y: neighbor.y + jitter(4), z: neighbor.z + jitter(4) }
+      : { x: jitter(20), y: jitter(20), z: jitter(20) });
+  }
+  return out;
+}
+
 /**
  * Lance la simulation d3-force-3d et retourne les positions stabilisées.
- * La simulation est relancée à chaque changement de graphData.
+ * La simulation est relancée à chaque changement de graphData, en repartant
+ * des positions précédentes des nœuds déjà affichés.
  * Une fois stabilisée (alpha < threshold), elle est mise en pause.
  */
 export function useForceGraph(graphData: GraphData | null): SimResult {
@@ -46,6 +77,7 @@ export function useForceGraph(graphData: GraphData | null): SimResult {
     nodes: [], links: [], settled: false,
   });
   const simRef = useRef<any>(null);
+  const posRef = useRef<Map<string, Vec3>>(new Map());
 
   useEffect(() => {
     if (!graphData || graphData.nodes.length === 0) {
@@ -56,23 +88,25 @@ export function useForceGraph(graphData: GraphData | null): SimResult {
     // Stop previous simulation
     if (simRef.current) simRef.current.stop();
 
-    // Copie profonde des nœuds pour que d3 puisse muter x/y/z
-    const nodes: SimNode[] = graphData.nodes.map((n) => ({
-      ...n,
-      x:  (Math.random() - 0.5) * 20,
-      y:  (Math.random() - 0.5) * 20,
-      z:  (Math.random() - 0.5) * 20,
-      vx: 0, vy: 0, vz: 0,
-    }));
-
-    // Map id → SimNode pour résoudre les liens
-    const nodeById = new Map(nodes.map((n) => [n.id, n]));
-
     const links: any[] = graphData.links.map((l) => ({
       ...l,
       source: typeof l.source === "string" ? l.source : (l.source as GraphNode).id,
       target: typeof l.target === "string" ? l.target : (l.target as GraphNode).id,
     }));
+
+    // Copie profonde des nœuds pour que d3 puisse muter x/y/z
+    const known  = posRef.current;
+    const start  = initialPositions(graphData.nodes.map((n) => n.id), links, known);
+    const reused = graphData.nodes.filter((n) => known.has(n.id)).length;
+    const nodes: SimNode[] = graphData.nodes.map((n) => ({
+      ...n,
+      ...start.get(n.id)!,
+      vx: 0, vy: 0, vz: 0,
+    }));
+
+    const savePositions = () => {
+      posRef.current = new Map(nodes.map((n) => [n.id, { x: n.x, y: n.y, z: n.z }]));
+    };
 
     // Calcul du volume max pour normaliser la force des liens
     const maxVolume = Math.max(...links.map((l) => l.volume), 1);
@@ -119,6 +153,7 @@ export function useForceGraph(graphData: GraphData | null): SimResult {
         }
       })
       .on("end", () => {
+        savePositions();
         setResult({
           nodes: [...nodes],
           links: [...links] as SimLink[],
@@ -126,11 +161,16 @@ export function useForceGraph(graphData: GraphData | null): SimResult {
         });
       });
 
+    // Graphe en grande partie déjà placé (nœud déplié) : on part d'une
+    // énergie plus basse pour ne pas réorganiser toute la scène.
+    if (reused > graphData.nodes.length / 2) sim.alpha(0.5);
+
     simRef.current = sim;
 
     // Cleanup
     return () => {
       sim.stop();
+      savePositions();
     };
   }, [graphData]);
 

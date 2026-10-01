@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useVizStore } from "../lib/store";
 import { useForceGraph } from "../lib/useForceGraph";
@@ -45,7 +45,9 @@ export default function HomePage() {
   }, [chain]);
 
   // Applique le clustering si le graphe dépasse le budget de nœuds (ADR-0002)
-  const displayGraph = graph ? clusterGraph(graph, mode).graph : null;
+  // Mémoïsé : clusterGraph crée un nouvel objet au-delà du budget, ce qui
+  // relancerait la simulation à chaque rendu
+  const displayGraph = useMemo(() => (graph ? clusterGraph(graph, mode).graph : null), [graph, mode]);
   const { nodes, links, settled } = useForceGraph(displayGraph);
 
   return (
@@ -107,6 +109,7 @@ export default function HomePage() {
                 ["Glisser", "Orbiter"],
                 ["Clic droit", "Panoramique"],
                 ["Clic nœud", "Sélectionner"],
+                ["Explorer ⤢", "Suivre l'argent"],
                 ["Échap", "Désélectionner"],
               ].map(([key, action]) => (
                 <div key={key} className="flex items-center justify-between">

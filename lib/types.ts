@@ -49,6 +49,7 @@ export interface GraphNode {
   txCount:     number;
   isSmartMoney: boolean;
   isFocused:   boolean;          // nœud central de la recherche
+  expanded?:   boolean;          // contreparties déjà chargées ("suivre l'argent")
   // Injecté par d3-force-3d
   x?: number; y?: number; z?: number;
   vx?: number; vy?: number; vz?: number;
@@ -69,6 +70,7 @@ export interface GraphData {
   links: GraphLink[];
   centerAddress?: string;
   fetchedAt:      number;
+  isDemo?:        boolean;       // données mockées : pas d'exploration réelle
 }
 
 // ─── Modes de visualisation ────────────────────────────────────────────────────

@@ -426,7 +426,7 @@ export function mockWalletGraph(address: string, chain: Chain = "ethereum"): Gra
     assets:    assetsFor(i),
   }));
 
-  return { nodes, links, centerAddress: center, fetchedAt: Date.now() };
+  return { nodes, links, centerAddress: center, fetchedAt: Date.now(), isDemo: true };
 }
 
 export function mockDefiGraph(): GraphData {
@@ -463,7 +463,7 @@ export function mockDefiGraph(): GraphData {
     { source: "0xeth",  target: "0xpool5", volume: 30e6,  txCount: 2000,  direction: "both", timestamp: Date.now()/1e3 },
   ];
 
-  return { nodes, links, fetchedAt: Date.now() };
+  return { nodes, links, fetchedAt: Date.now(), isDemo: true };
 }
 
 export function mockContractGraph(address: string): GraphData {
@@ -491,5 +491,6 @@ export function mockContractGraph(address: string): GraphData {
     })),
     centerAddress: center,
     fetchedAt: Date.now(),
+    isDemo: true,
   };
 }
