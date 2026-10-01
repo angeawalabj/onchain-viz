@@ -71,11 +71,37 @@ une liste vide, et les erreurs remontent le détail d'Etherscan
 
 ## Conséquences
 
-- **Solana : jetons reçus partiellement visibles.** L'historique
-  (`getSignaturesForAddress`) ne liste que les transactions où l'adresse
-  figure elle-même ; un jeton reçu arrive sur son compte de jetons associé,
-  souvent sans que l'adresse principale apparaisse. Les envois et swaps signés
-  par le wallet sont bien vus. Lever cette limite demanderait d'interroger
-  aussi les comptes de jetons (ou l'API enrichie de Helius).
+- **Solana : jetons reçus** — résolu, voir l'addendum ci-dessous.
 - Ajouter un jeton = une ligne dans `TOKENS` (identifiant vérifié + décimales
   + prix fixe ou id CoinGecko).
+
+## Addendum (2026-10-01) — jetons reçus sur Solana
+
+**Problème.** L'historique d'un wallet (`getSignaturesForAddress`) ne liste
+que les transactions où son adresse figure. Un jeton reçu arrive sur le
+compte de jetons associé (ATA) du wallet, souvent sans que l'adresse
+principale apparaisse : la plupart des réceptions étaient invisibles.
+
+**Contrainte.** Le RPC public refuse `getTokenAccountsByOwner` ("Indexed
+requests require a personal token").
+
+**Décision.** L'ATA est une adresse dérivée déterministe :
+`PDA([wallet, TOKEN_PROGRAM, mint], ASSOCIATED_TOKEN_PROGRAM)`. On la calcule
+localement (`lib/adapters/solana-ata.ts` : base58, SHA-256 et test
+« sur la courbe » ed25519 en TypeScript pur, sans dépendance), pour chaque
+mint du registre, puis on lit aussi l'historique de chaque ATA (10 signatures),
+fusionné à celui du wallet (25) par date, plafonné aux 40 plus récentes.
+Coût : 5 requêtes de signatures en plus, sans requête pour trouver les comptes.
+
+Les 5 mints du registre appartiennent au programme SPL Token classique
+(vérifié) ; un jeton Token-2022 demanderait l'autre programme dans la
+dérivation. Les ATA calculées ont été vérifiées sur mainnet
+(`getAccountInfo` : owner et mint attendus).
+
+**Limites.** Les jetons détenus hors ATA (comptes de jetons auxiliaires,
+fréquents chez les exchanges) restent hors champ. Le RPC public limite le
+débit : des recherches très rapprochées peuvent récupérer moins de 40
+transactions (une clé Helius lève la limite).
+
+`tsconfig` passe en `target: ES2020` pour les littéraux BigInt (supportés par
+tous les navigateurs actuels ; le code livré est produit par SWC).
