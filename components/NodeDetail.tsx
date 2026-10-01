@@ -40,6 +40,13 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
     .filter((l) => l.source.id === selectedId)
     .reduce((s, l) => s + l.volume, 0);
 
+  // Actifs échangés par ce nœud, du plus volumineux au moins volumineux
+  const assetVolume = new Map<string, number>();
+  for (const l of connectedLinks) {
+    for (const a of l.assets ?? []) assetVolume.set(a, (assetVolume.get(a) ?? 0) + l.volume / l.assets!.length);
+  }
+  const assets = Array.from(assetVolume.entries()).sort((a, b) => b[1] - a[1]).map(([a]) => a);
+
   return (
     <AnimatePresence>
       {node && (
@@ -105,6 +112,18 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
             <StatCell label="Outflow"       value={formatUSD(outflowVolume)} color="text-red-400" />
           </div>
 
+          {/* Actifs échangés */}
+          {assets.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 px-4 py-2.5 border-t border-white/6">
+              <span className="text-xs text-white/35 font-mono mr-1">Actifs</span>
+              {assets.map((a) => (
+                <span key={a} className="rounded px-1.5 py-0.5 text-xs font-mono bg-white/6 text-white/60">
+                  {a}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Connexions */}
           {connectedLinks.length > 0 && (
             <div className="px-4 py-3">
@@ -128,6 +147,9 @@ export function NodeDetail({ nodes, links }: NodeDetailProps) {
                             {isOut ? "→" : "←"}
                           </span>
                           <span className="text-white/50 truncate">{peer.label}</span>
+                          {l.assets && (
+                            <span className="text-white/25 shrink-0">{l.assets.join("·")}</span>
+                          )}
                         </div>
                         <span className="text-white/40 shrink-0 ml-2">
                           {formatUSD(l.volume)}

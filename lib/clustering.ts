@@ -91,6 +91,9 @@ export function clusterGraph(
       const existing   = linkMap.get(key)!;
       existing.volume  += link.volume;
       existing.txCount += link.txCount;
+      if (link.assets) {
+        existing.assets = Array.from(new Set([...(existing.assets ?? []), ...link.assets]));
+      }
     } else {
       linkMap.set(key, {
         ...link,

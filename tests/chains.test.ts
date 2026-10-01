@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { CHAINS, CHAIN_IDS, isModeSupported } from "../lib/chains";
 import { buildWalletGraph, mockWalletGraph } from "../lib/fetchers";
+import { NATIVE } from "../lib/tokens";
 
 // ─── Validation d'adresses ────────────────────────────────────────────────────
 
@@ -48,14 +49,15 @@ describe("isModeSupported", () => {
 
 describe("buildWalletGraph", () => {
   const transfers = [
-    { peer: "0.0.2000", isOut: true,  amount: 1000, timestamp: 1 },
-    { peer: "0.0.2000", isOut: true,  amount: 500,  timestamp: 2 },
-    { peer: "0.0.3000", isOut: false, amount: 2000, timestamp: 3 },
-    { peer: "0.0.4000", isOut: false, amount: 1,    timestamp: 4 },   // < minVolume
+    { peer: "0.0.2000", isOut: true,  asset: NATIVE, amount: 1000, timestamp: 1 },
+    { peer: "0.0.2000", isOut: true,  asset: NATIVE, amount: 500,  timestamp: 2 },
+    { peer: "0.0.3000", isOut: false, asset: NATIVE, amount: 2000, timestamp: 3 },
+    { peer: "0.0.4000", isOut: false, asset: NATIVE, amount: 1,    timestamp: 4 },   // < minVolume
   ];
+  const prices = { [NATIVE]: 0.1 };
 
   it("agrège les transferts par pair et par sens, filtre sous minVolume", () => {
-    const g = buildWalletGraph("hedera", "0.0.1000", transfers, 0.1, 50);
+    const g = buildWalletGraph("hedera", "0.0.1000", transfers, prices, 50);
     expect(g.nodes).toHaveLength(3);
     expect(g.links).toHaveLength(2);
     const out = g.links.find((l) => l.target === "0.0.2000")!;
@@ -65,7 +67,7 @@ describe("buildWalletGraph", () => {
   });
 
   it("le nœud focal cumule le volume de tous ses liens", () => {
-    const g     = buildWalletGraph("hedera", "0.0.1000", transfers, 0.1, 50);
+    const g     = buildWalletGraph("hedera", "0.0.1000", transfers, prices, 50);
     const focal = g.nodes.find((n) => n.isFocused)!;
     expect(focal.id).toBe("0.0.1000");
     expect(focal.volume).toBeCloseTo(350);
@@ -74,10 +76,28 @@ describe("buildWalletGraph", () => {
   it("préserve la casse des adresses Solana", () => {
     const addr = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
     const g    = buildWalletGraph("solana", addr, [
-      { peer: "H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS", isOut: true, amount: 10, timestamp: 1 },
-    ], 100, 1);
+      { peer: "H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS", isOut: true, asset: NATIVE, amount: 10, timestamp: 1 },
+    ], { [NATIVE]: 100 }, 1);
     expect(g.nodes.map((n) => n.id)).toContain("H8sMJSCQxfKiFTCfDR3DUMLPwcRbM61LGFJ8N4dK3WjS");
     expect(g.nodes.find((n) => n.isFocused)!.label).toBe("Binance");
+  });
+
+  it("valorise chaque actif à son prix et liste les symboles du lien", () => {
+    const USDC = "0.0.456858";
+    const g = buildWalletGraph("hedera", "0.0.1000", [
+      { peer: "0.0.2000", isOut: true, asset: NATIVE, amount: 1000, timestamp: 1 },   // $100
+      { peer: "0.0.2000", isOut: true, asset: USDC,   amount: 250,  timestamp: 2 },   // $250
+    ], { [NATIVE]: 0.1, [USDC]: 1 }, 10);
+    expect(g.links).toHaveLength(1);
+    expect(g.links[0].volume).toBeCloseTo(350);
+    expect(g.links[0].assets).toEqual(["HBAR", "USDC"]);
+  });
+
+  it("ignore les actifs sans prix", () => {
+    const g = buildWalletGraph("hedera", "0.0.1000", [
+      { peer: "0.0.2000", isOut: true, asset: "0.0.456858", amount: 1000, timestamp: 1 },
+    ], { [NATIVE]: 0.1 }, 10);
+    expect(g.links).toHaveLength(0);
   });
 });
 
@@ -89,5 +109,6 @@ describe("mockWalletGraph par chaîne", () => {
     expect(focal.label).toBe(cfg.presets[0].label);
     expect(new Set(graph.nodes.map((n) => n.id)).size).toBe(graph.nodes.length);
     for (const n of graph.nodes) expect(cfg.isValidAddress(n.id)).toBe(true);
+    for (const l of graph.links) expect(l.assets?.length).toBeGreaterThan(0);
   });
 });

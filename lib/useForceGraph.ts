@@ -27,6 +27,7 @@ export interface SimLink {
   txCount:   number;
   direction: "in" | "out" | "both";
   timestamp: number;
+  assets?:   string[];
 }
 
 export interface SimResult {
