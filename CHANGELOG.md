@@ -71,6 +71,12 @@
 - Liens : liste des symboles échangés ; panneau de détail : actifs du nœud et de chaque connexion
 - 17 tests (adapters jetons sur réponses réelles, registre, prix, Etherscan V2)
 
+### Ajouté — jetons reçus sur Solana
+- Calcul local des comptes de jetons associés (ATA) du wallet pour chaque jeton suivi (`lib/adapters/solana-ata.ts`, sans dépendance) — le RPC public refuse `getTokenAccountsByOwner`
+- Historique du wallet + de ses ATA fusionné par date (40 transactions max) : les réceptions de jetons apparaissent
+- `tsconfig` : `target` ES2020 (littéraux BigInt)
+- 11 tests (SHA-256 sur vecteurs de référence, base58, courbe ed25519, ATA vérifiées sur mainnet, fusion des historiques)
+
 ### Ajouté — rejeu dans le temps
 - Barre de rejeu sous la scène : lecture/pause, curseur, date courante, retour au graphe complet (`components/Timeline.tsx`)
 - Chaque lien garde ses transferts datés (`GraphLink.events`) ; à l'instant t, seuls les liens déjà actifs sont affichés, avec le volume cumulé jusqu'à t (`lib/replay.ts`)

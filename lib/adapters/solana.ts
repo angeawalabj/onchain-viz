@@ -2,15 +2,24 @@
  * Solana — RPC JSON public (publicnode, CORS ouvert) ou Helius si clé fournie.
  * getSignaturesForAddress puis un getTransaction par signature : publicnode
  * limite les batchs à 1 getTransaction, on parallélise donc par petits lots.
+ *
+ * Les jetons reçus arrivent sur les comptes de jetons associés (ATA) du
+ * wallet, pas sur son adresse : on lit aussi l'historique de l'ATA de chaque
+ * jeton suivi, puis on fusionne les signatures par date.
  */
 
 import type { BalanceDelta, TxDeltas } from "./deltas";
 import { NATIVE, TOKENS, toUnits } from "../tokens";
+import { associatedTokenAddress } from "./solana-ata";
 
 const PUBLIC_RPC = "https://solana-rpc.publicnode.com";
 const LAMPORTS   = 1e9;
-const TX_LIMIT   = 25;
+const TX_LIMIT   = 25;      // signatures du wallet
+const ATA_LIMIT  = 10;      // signatures par compte de jetons
+const TX_CAP     = 40;      // transactions récupérées au total (les plus récentes)
 const CONCURRENCY = 5;
+
+interface SignatureInfo { signature: string; err: unknown; blockTime?: number | null }
 
 export function solanaRpcUrl(heliusKey: string): string {
   return heliusKey ? `https://mainnet.helius-rpc.com/?api-key=${heliusKey}` : PUBLIC_RPC;
@@ -26,17 +35,40 @@ async function rpc<T>(url: string, body: unknown): Promise<T> {
   return res.json();
 }
 
+async function signaturesOf(url: string, address: string, limit: number): Promise<SignatureInfo[]> {
+  const res = await rpc<{ result?: SignatureInfo[]; error?: { message: string } }>(url, {
+    jsonrpc: "2.0", id: 1,
+    method:  "getSignaturesForAddress",
+    params:  [address, { limit }],
+  });
+  if (res.error) throw new Error(res.error.message);
+  return res.result ?? [];
+}
+
+/** Fusionne plusieurs historiques : sans doublon, sans échec, du plus récent au plus ancien. */
+export function mergeSignatures(lists: SignatureInfo[][], cap: number): string[] {
+  const seen = new Map<string, number>();
+  for (const list of lists) {
+    for (const s of list) if (!s.err) seen.set(s.signature, s.blockTime ?? 0);
+  }
+  return Array.from(seen.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, cap)
+    .map(([sig]) => sig);
+}
+
 export async function fetchSolanaTxDeltas(address: string, heliusKey: string): Promise<TxDeltas[]> {
   const url = solanaRpcUrl(heliusKey);
 
-  const sigRes = await rpc<{ result?: { signature: string; err: unknown }[]; error?: { message: string } }>(url, {
-    jsonrpc: "2.0", id: 1,
-    method:  "getSignaturesForAddress",
-    params:  [address, { limit: TX_LIMIT }],
-  });
-  if (sigRes.error) throw new Error(sigRes.error.message);
+  // L'historique du wallet est obligatoire ; celui des comptes de jetons est un
+  // complément (un compte jamais créé renvoie simplement une liste vide)
+  const atas = Object.keys(TOKENS.solana).map((mint) => associatedTokenAddress(address, mint));
+  const [own, ...tokenHistories] = await Promise.all([
+    signaturesOf(url, address, TX_LIMIT),
+    ...atas.map((ata) => signaturesOf(url, ata, ATA_LIMIT).catch(() => [])),
+  ]);
 
-  const sigs = (sigRes.result ?? []).filter((s) => !s.err).map((s) => s.signature);
+  const sigs = mergeSignatures([own, ...tokenHistories], TX_CAP);
   if (sigs.length === 0) return [];
 
   const txs: (SolanaTx | null)[] = [];
