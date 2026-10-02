@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import type { SimLink } from "../lib/useForceGraph";
@@ -125,9 +125,15 @@ export function GraphEdges({ links, maxVolume, selectedId }: GraphEdgesProps) {
 /** Petites particules qui se déplacent le long des liens importants */
 function FlowParticles({ links }: { links: SimLink[] }) {
   const ref      = useRef<THREE.Points>(null!);
-  const progress = useRef<Float32Array>(
-    new Float32Array(links.length).map(() => Math.random())
-  );
+  const progress = useRef<Float32Array>(new Float32Array(0));
+
+  // Redimensionne la progression quand le nombre de liens change (nouveau
+  // graphe, nœud déplié, rejeu) — sinon les particules en trop valent NaN
+  if (progress.current.length !== links.length) {
+    const next = new Float32Array(links.length).map(() => Math.random());
+    next.set(progress.current.subarray(0, Math.min(links.length, progress.current.length)));
+    progress.current = next;
+  }
 
   const { positions, colors } = useMemo(() => {
     const pos = new Float32Array(links.length * 3);
@@ -154,6 +160,7 @@ function FlowParticles({ links }: { links: SimLink[] }) {
     g.setAttribute("color",    new THREE.BufferAttribute(colors, 3));
     return g;
   }, [positions, colors]);
+  useEffect(() => () => geo.dispose(), [geo]);   // libère la géométrie remplacée
 
   useFrame((_, delta) => {
     if (!ref.current || links.length === 0) return;

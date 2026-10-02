@@ -130,6 +130,7 @@ export function buildWalletGraph(
       const link = linkMap.get(linkKey)!;
       link.volume  += valueUSD;
       link.txCount += 1;
+      link.events!.push({ t: t.timestamp, usd: valueUSD });
       if (!link.assets!.includes(info.symbol)) link.assets!.push(info.symbol);
     } else {
       linkMap.set(linkKey, {
@@ -140,6 +141,7 @@ export function buildWalletGraph(
         direction: isOut ? "out" : "in",
         timestamp: t.timestamp,
         assets:    [info.symbol],
+        events:    [{ t: t.timestamp, usd: valueUSD }],
       });
     }
   }

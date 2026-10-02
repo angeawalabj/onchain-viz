@@ -79,7 +79,8 @@ onchain-viz/
 │   ├── NodeLabels.tsx    ← Billboard text SDF
 │   ├── SearchPanel.tsx   ← Input + mode selector + presets
 │   ├── NodeDetail.tsx    ← Panel latéral nœud sélectionné
-│   └── ControlsBar.tsx   ← Stats + rotation + API keys
+│   ├── ControlsBar.tsx   ← Stats + rotation + API keys
+│   └── Timeline.tsx      ← Barre de rejeu dans le temps
 ├── lib/
 │   ├── types.ts          ← Types, palette, helpers
 │   ├── store.ts          ← Zustand store global
@@ -87,6 +88,7 @@ onchain-viz/
 │   ├── tokens.ts         ← Registre des jetons suivis par chaîne
 │   ├── prices.ts         ← Prix USD (CoinGecko + fallback)
 │   ├── expand.ts         ← « Suivre l'argent » : fusion du graphe d'un nœud déplié
+│   ├── replay.ts         ← Rejeu dans le temps : sous-graphe visible à l'instant t
 │   ├── fetchers.ts       ← Graphe wallet multi-chaînes, The Graph, Alchemy + mocks
 │   ├── adapters/         ← deltas (règle commune), solana, sui, hedera
 │   └── useForceGraph.ts  ← Hook d3-force-3d simulation

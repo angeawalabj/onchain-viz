@@ -10,6 +10,8 @@ import { NodeDetail } from "../components/NodeDetail";
 import { ControlsBar } from "../components/ControlsBar";
 import { mockWalletGraph } from "../lib/fetchers";
 import { clusterGraph } from "../lib/clustering";
+import { filterAtTime } from "../lib/replay";
+import { Timeline } from "../components/Timeline";
 
 // Canvas WebGL doit être chargé côté client uniquement
 const Scene3D = dynamic(
@@ -48,7 +50,15 @@ export default function HomePage() {
   // Mémoïsé : clusterGraph crée un nouvel objet au-delà du budget, ce qui
   // relancerait la simulation à chaque rendu
   const displayGraph = useMemo(() => (graph ? clusterGraph(graph, mode).graph : null), [graph, mode]);
-  const { nodes, links, settled } = useForceGraph(displayGraph);
+  const sim = useForceGraph(displayGraph);
+  const { settled } = sim;
+
+  // Rejeu : même disposition, on filtre seulement ce qui est visible à l'instant t
+  const replayTime = useVizStore((s) => s.replayTime);
+  const { nodes, links } = useMemo(
+    () => filterAtTime(sim.nodes, sim.links, replayTime),
+    [sim.nodes, sim.links, replayTime]
+  );
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: "#060610" }}>
@@ -127,13 +137,16 @@ export default function HomePage() {
 
       {/* ── Canvas 3D ───────────────────────────────────────────────────────── */}
       <div className="relative flex-1">
-        <Scene3D />
+        <Scene3D nodes={nodes} links={links} />
 
-        {/* Watermark discret */}
-        <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2">
-          <p className="text-xs font-mono text-white/15">
-            données démo — connecte une clé API pour les données réelles
-          </p>
+        {/* Rejeu dans le temps + watermark démo */}
+        <div className="absolute bottom-4 left-1/2 flex w-[min(560px,90%)] -translate-x-1/2 flex-col items-center gap-2">
+          <Timeline links={sim.links} />
+          {graph?.isDemo && (
+            <p className="pointer-events-none text-xs font-mono text-white/15">
+              données démo — connecte une clé API pour les données réelles
+            </p>
+          )}
         </div>
       </div>
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { GraphData, GraphNode, GraphLink } from "./types";
+import type { GraphData, GraphNode, GraphLink, LinkEvent } from "./types";
 
 // d3-force-3d exporte des fonctions nommées (pas de default export)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,6 +28,7 @@ export interface SimLink {
   direction: "in" | "out" | "both";
   timestamp: number;
   assets?:   string[];
+  events?:   LinkEvent[];
 }
 
 export interface SimResult {

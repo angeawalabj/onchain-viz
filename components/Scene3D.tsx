@@ -16,21 +16,24 @@ import {
 import { BlendFunction } from "postprocessing";
 import * as THREE from "three";
 import { useVizStore } from "../lib/store";
-import { useForceGraph } from "../lib/useForceGraph";
+import type { SimNode, SimLink } from "../lib/useForceGraph";
 import { GraphNodes } from "./GraphNodes";
 import { GraphEdges } from "./GraphEdges";
 import { NodeLabels } from "./NodeLabels";
 import { PALETTE } from "../lib/types";
 
-export function Scene3D() {
-  const graph       = useVizStore((s) => s.graph);
+interface Scene3DProps {
+  nodes: SimNode[];
+  links: SimLink[];
+}
+
+/** Rendu 3D. La simulation tourne une seule fois, dans la page, et ses positions arrivent ici. */
+export function Scene3D({ nodes, links }: Scene3DProps) {
   const selectedId  = useVizStore((s) => s.selectedNode);
   const hoveredId   = useVizStore((s) => s.hoveredNode);
   const autoRotate  = useVizStore((s) => s.autoRotate);
   const setSelected = useVizStore((s) => s.setSelected);
   const setHovered  = useVizStore((s) => s.setHovered);
-
-  const { nodes, links } = useForceGraph(graph);
 
   const maxVolume = nodes.length > 0
     ? Math.max(...nodes.map((n) => n.volume), 1)

@@ -55,6 +55,11 @@ export interface GraphNode {
   vx?: number; vy?: number; vz?: number;
 }
 
+export interface LinkEvent {
+  t:   number;                   // unix (secondes)
+  usd: number;
+}
+
 export interface GraphLink {
   source:    string | GraphNode;
   target:    string | GraphNode;
@@ -63,6 +68,7 @@ export interface GraphLink {
   direction: "in" | "out" | "both";
   timestamp: number;             // last tx unix
   assets?:   string[];           // symboles échangés sur ce lien (ex: ["SOL", "USDC"])
+  events?:   LinkEvent[];        // transferts datés, pour le rejeu dans le temps
 }
 
 export interface GraphData {
@@ -116,6 +122,10 @@ export interface VizStore {
   setSelected:  (id: string | null) => void;
   hoveredNode:  string | null;
   setHovered:   (id: string | null) => void;
+
+  // Rejeu dans le temps (null = graphe complet)
+  replayTime:    number | null;
+  setReplayTime: (t: number | null) => void;
 
   // Paramètres caméra
   autoRotate:   boolean;
